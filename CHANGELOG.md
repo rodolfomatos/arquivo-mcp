@@ -8,29 +8,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
-- Milestone 0: Project scaffolding (TypeScript, ESLint, Prettier, Makefile, CI)
-- Milestone 1: HTTP client with token bucket throttling, retry logic, structured logging
-- Milestone 2: Tools `search_fulltext` and `get_url_versions` with MCP integration
-- Milestone 3: Tools `get_page_content` and `search_images`
-- Unit test suite with 47 passing tests (Vitest)
-- Integration tests for all tools (marked `[integration]`)
+- Environment variable configuration: `MAX_REQUESTS_PER_SECOND` to tune rate limiting
+- `LOG_LEVEL` documented for controlling structured log verbosity
 
-### Features (MCP Tools)
+### Fixed
 
-- `search_fulltext`: Full-text search with date/site/type filters
-- `get_url_versions`: List all archived versions of a URL
-- `get_page_content`: Extract and truncate page content (with fallback to HTML scraping)
-- `search_images`: Search historical images
+- SSRF vulnerability in `get_page_content` by validating `arquivo.pt` domain
+- Pagination offset now clamped to non-negative values (prevents API errors)
+- Latency warning logged and displayed when `get_page_content` exceeds 5s
+- Retry logic now includes jitter (±20%) and respects `Retry-After` header
+- `HttpError` class replaces unsafe casts (`@ts-expect-error`)
+- Output truncation: all paginated tools limited to 8000 tokens (RNF-02)
+- Unit test coverage expanded: `validation.test.ts`, `encoding.test.ts`, `logger.test.ts`
 
-### Technical
+### Technical improvements
 
-- TypeScript with strict mode
-- Token bucket rate limiter (1 req/s)
-- Exponential backoff retry (max 2 attempts)
-- 10-second timeout on all HTTP requests
-- Cheerio-based HTML stripping
-- Token-aware truncation (~4 chars/token)
-- JSON-structured logging to stderr
+- Graceful shutdown: handles SIGINT/SIGTERM, stops throttler
+- Integration test timeouts increased to 90–180s for stability
+- Type safety: removed `any` casts, created `src/tools/types.ts` for parameter interfaces
+- Build, lint, and tests passing via `make check`
+
+### Known issues
+
+- Moderate vulnerability in `ip-address` (transitive via MCP SDK). Awaiting upstream fix.
 
 ## [1.0.0] - Planned
 

@@ -13,5 +13,5 @@ describe('Integration: search_fulltext', () => {
     expect(first.archiveLink).toBeDefined();
     expect(first.snippet).toBeDefined();
     expect(first.tstamp).toBeDefined();
-  }, 60000); // test timeout 60s
+  }, 90000); // test timeout 90s
 });

@@ -63,10 +63,13 @@ export class ArquivoClient {
       timeoutMs?: number;
     } = {},
   ) {
-    this.throttler = new TokenBucket(
-      options.maxRequestsPerSecond ?? 1,
-      1, // refill rate: 1 token per second
-    );
+    const rps =
+      options.maxRequestsPerSecond ??
+      (typeof process.env.MAX_REQUESTS_PER_SECOND === 'string'
+        ? parseInt(process.env.MAX_REQUESTS_PER_SECOND, 10)
+        : undefined) ??
+      1;
+    this.throttler = new TokenBucket(rps, 1); // refill rate: 1 token per second
     this.maxRetries = options.maxRetries ?? 2;
     this.timeoutMs = options.timeoutMs ?? 10000;
   }

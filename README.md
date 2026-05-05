@@ -203,6 +203,82 @@ npm run test:integration
 make check
 ```
 
+## Production Deployment
+
+### Environment Variables
+
+- `MAX_REQUESTS_PER_SECOND` — Rate limit for outgoing requests to Arquivo.pt API (default: 1). The API allows ~250 requests per 180 seconds; adjust conservatively based on your workload.
+- `LOG_LEVEL` — Logging level (`debug`, `info`, `warn`, `error`). Default: `info`. Logs are written to stderr in JSON format.
+
+### Running as a Systemd Service
+
+Create `/etc/systemd/system/arquivo-mcp.service`:
+
+```ini
+[Unit]
+Description=Arquivo MCP Server
+After=network.target
+
+[Service]
+Type=simple
+User=youruser
+WorkingDirectory=/path/to/arquivo-mcp
+Environment="MAX_REQUESTS_PER_SECOND=1"
+Environment="LOG_LEVEL=info"
+ExecStart=/usr/bin/node /path/to/arquivo-mcp/dist/index.js
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Then:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now arquivo-mcp
+sudo journalctl -u arquivo-mcp -f  # view logs
+```
+
+### Docker
+
+Example `Dockerfile`:
+
+```dockerfile
+FROM node:20-alpine AS builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+FROM node:20-alpine
+WORKDIR /app
+COPY --from=builder /app/package*.json ./
+COPY --from=builder /app/dist ./dist
+RUN npm ci --only=production
+ENV MAX_REQUESTS_PER_SECOND=1
+ENV NODE_ENV=production
+CMD ["node", "dist/index.js"]
+```
+
+Build and run:
+
+```bash
+docker build -t arquivo-mcp .
+docker run -d --name arquivo-mcp --restart unless-stopped -e MAX_REQUESTS_PER_SECOND=1 arquivo-mcp
+docker logs -f arquivo-mcp
+```
+
+### Observability
+
+- Logs are JSON on stderr; capture via `journalctl`, Docker logs, or any log collector.
+- Set `LOG_LEVEL=debug` for verbose request/error logs.
+- The server does not expose metrics endpoints; monitor via logs and process health.
+
 ## Project Status
 
 - **v1.0.0** (planned) — All core tools implemented and tested

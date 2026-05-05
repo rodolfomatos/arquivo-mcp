@@ -12,5 +12,5 @@ describe('Integration: get_url_versions', () => {
       expect(first.status).toBeDefined();
       expect(first.link).toBeDefined();
     }
-  }, 120000);
+  }, 180000);
 });

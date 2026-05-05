@@ -11,5 +11,5 @@ describe('Integration: get_page_content', () => {
     expect(content.title).toBeDefined();
     expect(content.content).toBeDefined();
     expect(content.originalLength).toBeGreaterThan(0);
-  }, 120000);
+  }, 180000);
 });

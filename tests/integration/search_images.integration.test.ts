@@ -13,5 +13,5 @@ describe('Integration: search_images', () => {
       expect(first.pageLink).toBeDefined();
       expect(first.tstamp).toBeDefined();
     }
-  }, 120000); // 120s
+  }, 180000); // 180s
 });
