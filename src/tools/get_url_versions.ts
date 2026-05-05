@@ -8,6 +8,20 @@ import type { GetUrlVersionsParams } from './types.js';
 /**
  * Tool: get_url_versions
  * List all archived versions of a specific URL.
+ *
+ * Validates date range, clamps maxItems to API limit (1–100), formats
+ * results using formatVersionResults, and truncates to 8000 tokens (RNF-02).
+ *
+ * @param client - ArquivoClient instance
+ * @param params.url - URL to search for (with or without protocol), required
+ * @param params.from - Start date filter (YYYY or YYYYMMDDHHMMSS); optional
+ * @param params.to - End date filter (YYYY or YYYYMMDDHHMMSS); optional
+ * @param params.maxItems - Number of versions; defaults to 20, max 100
+ * @param params.offset - Pagination offset (default 0)
+ * @returns MCP content object with truncated text output
+ * @throws Error if URL missing, invalid date format, or API call fails
+ *
+ * Side effects: Logs errors on failure including params for context.
  */
 export async function getUrlVersionsTool(
   client: ArquivoClient,

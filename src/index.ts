@@ -15,6 +15,19 @@ import type { GetPageContentParams } from './tools/types.js';
 import type { SearchImagesParams } from './tools/types.js';
 import { logger } from './utils/logger.js';
 
+/**
+ * Main entry point: start the MCP server with Arquivo tools.
+ *
+ * Setup:
+ *   - Creates ArquivoClient with default or env-configured throttling/retry/timeout
+ *   - Registers 4 tools: search_fulltext, get_url_versions, get_page_content, search_images
+ *   - Sets up graceful shutdown on SIGINT/SIGTERM (calls client.shutdown())
+ *   - Connects via StdioServerTransport (MCP over stdio)
+ *
+ * Error handling: catches fatal errors, logs to stderr, exits with code 1.
+ *
+ * @returns Never returns; runs until process termination
+ */
 async function main() {
   const server = new Server(
     {

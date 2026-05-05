@@ -51,11 +51,33 @@ interface ApiResponse<T> {
 
 const ARQUIVO_API_BASE = 'https://arquivo.pt';
 
+/**
+ * Client for the Arquivo.pt (Portuguese web archive) API.
+ * Provides search, version history, image search, and page content fetching.
+ *
+ * Features:
+ * - Token bucket rate limiting to respect API boundaries
+ * - Exponential backoff with jitter and Retry-After header support
+ * - Request timeout AbortController
+ * - Automatic HTML parsing and extracted text fallback
+ *
+ * Default rate: 1 request per second (rps), 2 retries, 10s timeout.
+ */
 export class ArquivoClient {
   private throttler: TokenBucket;
   private maxRetries: number;
   private timeoutMs: number;
 
+  /**
+   * Initialize the ArquivoClient with optional configuration.
+   *
+   * @param options.maxRequestsPerSecond - Rate limit (requests per second). Default: 1. Can also be set via MAX_REQUESTS_PER_SECOND env var.
+   * @param options.maxRetries - Number of retry attempts on retryable errors. Default: 2.
+   * @param options.timeoutMs - Request timeout in milliseconds. Default: 10000 (10s).
+   *
+   * Throttling: TokenBucket with refill rate = capacity (steady 1 token/sec).
+   * Retry: Exponential backoff with 0.8–1.2 jitter; respects Retry-After header on 429.
+   */
   constructor(
     options: {
       maxRequestsPerSecond?: number;
@@ -69,11 +91,23 @@ export class ArquivoClient {
         ? parseInt(process.env.MAX_REQUESTS_PER_SECOND, 10)
         : undefined) ??
       1;
-    this.throttler = new TokenBucket(rps, 1); // refill rate: 1 token per second
+    // TokenBucket: capacity = rps tokens, refillRate = 1 token/sec (steady drip)
+    this.throttler = new TokenBucket(rps, 1);
     this.maxRetries = options.maxRetries ?? 2;
     this.timeoutMs = options.timeoutMs ?? 10000;
   }
 
+  /**
+   * Make an authenticated GET request to the Arquivo.pt API.
+   * Handles throttling, timeout, retries, and JSON parsing.
+   *
+   * @param endpoint - API endpoint path (e.g., '/textsearch')
+   * @param params - Query parameters object; undefined/null values are omitted
+   * @returns Parsed JSON response of type T
+   * @throws HttpError for HTTP errors (4xx/5xx); other errors for network/timeouts
+   *
+   * @private Internal method; applies throttling automatically.
+   */
   private async request<T>(endpoint: string, params: Record<string, unknown> = {}): Promise<T> {
     await this.throttler.consume();
 
@@ -119,6 +153,14 @@ export class ArquivoClient {
 
   /**
    * Fetch with retry and timeout, without throttling (caller must consume token).
+   *
+   * @param url - Target URL to fetch
+   * @param init - Optional RequestInit for custom fetch options (headers, method, body)
+   * @param timeoutMs - Override default timeout; uses instance default if omitted
+   * @returns Response object on successful fetch (caller must check .ok)
+   * @throws Error or AbortError on failure after retries or timeout
+   *
+   * @private Internal method; does not apply throttling. Caller must call throttler.consume() beforehand.
    */
   private async fetchWithRetryAndTimeout(
     url: string,
@@ -139,6 +181,20 @@ export class ArquivoClient {
     }
   }
 
+  /**
+   * Perform a full-text search on the Portuguese web archive.
+   *
+   * @param params.query - Search query; supports "exact phrases" and -exclusions
+   * @param params.from - Start date filter (YYYY or YYYYMMDDHHMMSS); optional
+   * @param params.to - End date filter (YYYY or YYYYMMDDHHMMSS); optional
+   * @param params.site - Limit to a specific domain (e.g., 'publico.pt')
+   * @param params.type - MIME type filter (html, pdf, doc, etc.)
+   * @param params.maxItems - Number of results; defaults to 10, capped at 50
+   * @param params.offset - Pagination offset (default 0)
+   * @returns Array of SearchResult with title, link, archiveLink, snippet, tstamp, optional size
+   *
+   * Note: Uses API limit parameter hard-capped at 50 to avoid excessive requests.
+   */
   async searchFulltext(params: {
     query: string;
     from?: string;
@@ -170,6 +226,18 @@ export class ArquivoClient {
     }));
   }
 
+  /**
+   * List all archived versions of a specific URL.
+   *
+   * @param params.url - URL to look up (with or without protocol)
+   * @param params.from - Start date filter (YYYY or YYYYMMDDHHMMSS); optional
+   * @param params.to - End date filter (YYYY or YYYYMMDDHHMMSS); optional
+   * @param params.maxItems - Number of versions; defaults to 20, capped at 100
+   * @param params.offset - Pagination offset (default 0)
+   * @returns Array of Version with tstamp, status, link, optional size
+   *
+   * Note: Uses /textsearch endpoint with versionHistory parameter; limit hard-capped at 100.
+   */
   async getUrlVersions(params: {
     url: string;
     from?: string;
@@ -195,6 +263,18 @@ export class ArquivoClient {
     }));
   }
 
+  /**
+   * Search for historical images in the Portuguese web archive.
+   *
+   * @param params.query - Search terms for images
+   * @param params.from - Start date filter (YYYY or YYYYMMDDHHMMSS); optional
+   * @param params.to - End date filter (YYYY or YYYYMMDDHHMMSS); optional
+   * @param params.maxItems - Number of results; defaults to 10, capped at 20
+   * @param params.offset - Pagination offset (default 0)
+   * @returns Array of ImageResult with title, imgLink, pageLink, tstamp, optional width/height
+   *
+   * Note: Uses /imagesearch endpoint; limit hard-capped at 20 to avoid large responses.
+   */
   async searchImages(params: {
     query: string;
     from?: string;
@@ -224,7 +304,16 @@ export class ArquivoClient {
 
   /**
    * Fetch and extract text content from an archived page.
-   * Now uses throttling, retry, and timeout for both fetches.
+   * Performs two fetches: the archive HTML page, then optionally the extracted text file.
+   * Applies throttling, retry, timeout, token truncation, and HTML parsing.
+   *
+   * @param archiveUrl - Full Arquivo.pt archive URL (must be from arquivo.pt)
+   * @param maxTokens - Maximum tokens to return; defaults to 4000; truncated at word boundary
+   * @returns Object with title, truncated content, and original full content length
+   * @throws Error if archive page fetch fails or is not OK
+   *
+   * Side effects: logs warnings if extracted text fetch fails (falls back to HTML strip).
+   * Throttling: consumes two tokens if extracted text is found, one otherwise.
    */
   async fetchPage(
     archiveUrl: string,

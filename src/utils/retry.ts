@@ -3,6 +3,21 @@ import { HttpError } from './HttpError.js';
 /**
  * Retry logic with exponential backoff and jitter.
  * Respects Retry-After header if present on HttpError.
+ *
+ * Algorithm: For attempts 0..maxRetries, executes `fn`. On failure:
+ *   - If error is HttpError with Retry-After header, uses that delay (in ms)
+ *   - Otherwise: delay = baseDelayMs * 2^attempt * jitter(0.8–1.2)
+ *   - jitter adds ±20% randomness to avoid thundering herd
+ *
+ * @param fn - Async function to retry
+ * @param maxRetries - Maximum retry attempts (default 2)
+ * @param baseDelayMs - Base delay in ms (default 1000)
+ * @param shouldRetry - Predicate: (error, attempt) => true to retry, false to fail fast
+ * @returns Successful result from `fn`
+ * @throws Last error if all retries exhausted or shouldRetry returns false
+ *
+ * Side effects: logs via caller; this function is silent.
+ * Error handling: re-throws non-retryable errors immediately.
  */
 export async function retryWithBackoff<T>(
   fn: () => Promise<T>,
@@ -46,7 +61,18 @@ export async function retryWithBackoff<T>(
 }
 
 /**
- * Check if an error is retryable: HttpError with 429/5xx, network errors, or AbortError (timeout).
+ * Determine if an error is safe to retry.
+ *
+ * Retryable conditions:
+ *   - HttpError with status 429 (rate limit) or 5xx (server errors)
+ *   - Legacy shape: error.response.status 429/5xx (for older code)
+ *   - Network errors: ECONNABORTED (timeout), ENETUNREACH (network unreachable)
+ *   - AbortError from AbortController (Node.js fetch timeout)
+ *
+ * @param error - Unknown error object from fetch or previous retry
+ * @returns true if the operation should be retried
+ *
+ * Note: Does not log; used by retryWithBackoff only.
  */
 export function isRetryableError(error: unknown): boolean {
   // HttpError (preferred)

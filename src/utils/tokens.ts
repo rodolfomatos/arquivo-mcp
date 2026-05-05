@@ -2,6 +2,10 @@
  * Truncate text to approximately `maxTokens` tokens.
  * Uses rough approximation: 1 token ≈ 4 characters.
  * Cuts at word boundaries to avoid partial words.
+ *
+ * @param text - Input text to truncate
+ * @param maxTokens - Maximum token count; actual character limit = maxTokens * 4
+ * @returns Truncated text ending at last space before limit, with '[truncated]' suffix
  */
 export function truncateToTokens(text: string, maxTokens: number): string {
   const approxCharsPerToken = 4;

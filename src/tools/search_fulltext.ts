@@ -7,7 +7,23 @@ import type { SearchFulltextParams } from './types.js';
 
 /**
  * Tool: search_fulltext
- * Full-text search on Portuguese web archive.
+ * Full-text search on the Portuguese web archive.
+ *
+ * Validates date ranges, clamps maxItems to API limit (1–50), formats
+ * results with formatSearchResults, and truncates to 8000 tokens (RNF-02).
+ *
+ * @param client - ArquivoClient instance
+ * @param params.query - Search query (required, non-empty); supports "exact phrases" and -exclusions
+ * @param params.from - Start date (YYYY or YYYYMMDDHHMMSS); optional
+ * @param params.to - End date (YYYY or YYYYMMDDHHMMSS); optional
+ * @param params.site - Limit to specific domain (e.g., publico.pt); optional
+ * @param params.type - MIME type filter (html, pdf, doc, etc.); optional
+ * @param params.maxItems - Number of results; defaults to 10, max 50
+ * @param params.offset - Pagination offset (default 0)
+ * @returns MCP content object with truncated text output
+ * @throws Error if query missing, invalid date format, or API call fails
+ *
+ * Side effects: Logs errors on failure including params for context.
  */
 export async function searchFulltextTool(
   client: ArquivoClient,

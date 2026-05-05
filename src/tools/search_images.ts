@@ -8,6 +8,21 @@ import type { SearchImagesParams } from './types.js';
 /**
  * Tool: search_images
  * Search historical images in the Portuguese web archive.
+ *
+ * Validates date range parameters, clamps maxItems to API limit (1–20),
+ * formats results using formatImageResults, and truncates to 8000 tokens
+ * (RNF-02) to prevent oversized LLM responses.
+ *
+ * @param client - ArquivoClient instance
+ * @param params.query - Search terms for images (required, non-empty)
+ * @param params.from - Start date (YYYY or YYYYMMDDHHMMSS); optional
+ * @param params.to - End date (YYYY or YYYYMMDDHHMMSS); optional
+ * @param params.maxItems - Number of results; defaults to 10, max 20
+ * @param params.offset - Pagination offset (default 0)
+ * @returns MCP content object with truncated text output
+ * @throws Error if query missing, invalid date format, or API call fails
+ *
+ * Side effects: Logs errors on failure including params for context.
  */
 export async function searchImagesTool(
   client: ArquivoClient,

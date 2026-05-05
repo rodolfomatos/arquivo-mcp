@@ -3,12 +3,19 @@
  */
 
 /**
- * Maximum output tokens to avoid overwhelming the LLM (RNF-02).
- * Using ~4 chars per token approximation.
+ * Maximum output tokens (RNF-02): 8000 tokens ≈ 32000 chars.
+ * Rationale: Prevent oversized responses that exceed LLM context windows
+ * or cause slow streaming. Chosen to fit typical 8k–16k token limits.
  */
 const MAX_TOKENS = 8000;
-const MAX_CHARS = MAX_TOKENS * 4; // ~32000 chars
+const MAX_CHARS = MAX_TOKENS * 4; // ~32000 chars (1 token ≈ 4 chars)
 
+/**
+ * Truncate output string to MAX_CHARS, cutting at last newline to avoid partial lines.
+ *
+ * @param output - Full formatted output string
+ * @returns Truncated string with '[Output truncated due to token limit]' suffix if cut
+ */
 function truncateOutput(output: string): string {
   if (output.length <= MAX_CHARS) {
     return output;
@@ -20,6 +27,13 @@ function truncateOutput(output: string): string {
   return output.slice(0, cutPoint) + '\n\n[Output truncated due to token limit]';
 }
 
+/**
+ * Format a YYYYMMDD... timestamp into YYYY-MM-DD (8 digits).
+ * Partial timestamps are returned as-is without formatting.
+ *
+ * @param tstamp - Raw timestamp from API (e.g., '20230115120000')
+ * @returns Formatted date string (e.g., '2023-01-15') or raw prefix if shorter
+ */
 function formatDate(tstamp: string): string {
   const raw = tstamp.slice(0, 8); // YYYYMMDD
   if (raw.length === 8) {
@@ -28,6 +42,13 @@ function formatDate(tstamp: string): string {
   return raw;
 }
 
+/**
+ * Extract a clean hostname from a URL for display (strip 'www.' prefix).
+ * If URL parsing fails, returns the original string as fallback.
+ *
+ * @param url - Full URL (e.g., 'https://www.publico.pt/...')
+ * @returns Clean hostname (e.g., 'publico.pt') or raw URL on parse error
+ */
 function extractHostname(url: string): string {
   try {
     return new URL(url).hostname.replace(/^www\./, '');
@@ -36,6 +57,24 @@ function extractHostname(url: string): string {
   }
 }
 
+/**
+ * Format full-text search results into a human-readable, LLM-friendly string.
+ *
+ * Output structure:
+ *   [N resultados para "query" desde/até/entre dateRange]
+ *   1. Title (hostname — date)
+ *     URL original: ...
+ *     Arquivo: ...
+ *     Snippet: ...
+ *
+ * @param query - Original search query (echoed in header)
+ * @param from - Start date filter for display (optional)
+ * @param to - End date filter for display (optional)
+ * @param results - Array of search result items
+ * @param offset - Pagination offset; added to result numbering
+ * @param total - Optional total count; used to indicate next page availability
+ * @returns Formatted string, truncated at MAX_TOKENS via truncateOutput()
+ */
 export function formatSearchResults(
   query: string,
   from?: string,
@@ -79,7 +118,19 @@ export function formatSearchResults(
 }
 
 /**
- * Formata lista de versões de URL.
+ * Format version history results into a human-readable string.
+ *
+ * Output structure:
+ *   [N versões arquivadas de URL]
+ *   1. YYYY-MM-DD — HTTP STATUS
+ *     Arquivo: ...
+ *     Tamanho: X.X KB (if available)
+ *
+ * @param url - Original URL being versioned (echoed in header)
+ * @param results - Array of version items with tstamp, status, link, optional size
+ * @param offset - Pagination offset; added to result numbering
+ * @param total - Optional total count; used to indicate next page availability
+ * @returns Formatted string, truncated at MAX_TOKENS via truncateOutput()
  */
 export function formatVersionResults(
   url: string,
@@ -112,7 +163,21 @@ export function formatVersionResults(
 }
 
 /**
- * Formata resultados de imagem.
+ * Format image search results into a human-readable string.
+ *
+ * Output structure:
+ *   [N imagens para "query"]
+ *   1. Title
+ *     URL imagem: ...
+ *     Página de origem: ...
+ *     Data: YYYY-MM-DD
+ *     Dimensões: WxH (if available)
+ *
+ * @param query - Original search query (echoed in header)
+ * @param results - Array of image result items
+ * @param offset - Pagination offset; added to result numbering
+ * @param total - Optional total count; used to indicate next page availability
+ * @returns Formatted string, truncated at MAX_TOKENS via truncateOutput()
  */
 export function formatImageResults(
   query: string,

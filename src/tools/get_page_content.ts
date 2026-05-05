@@ -3,7 +3,11 @@ import { logger } from '../utils/logger.js';
 import type { GetPageContentParams } from './types.js';
 
 /**
- * Validate that URL belongs to Arquivo.pt to prevent SSRF.
+ * Validate that URL belongs to Arquivo.pt to prevent SSRF attacks.
+ * Only allows exact hostname 'arquivo.pt' or subdomains ending with '.arquivo.pt'.
+ *
+ * @param url - URL string to validate
+ * @returns true if hostname matches arquivo.pt or its subdomains
  */
 function isArquivoUrl(url: string): boolean {
   try {
@@ -17,7 +21,27 @@ function isArquivoUrl(url: string): boolean {
 
 /**
  * Tool: get_page_content
- * Fetch text content from an archived page.
+ * Fetches text content from an archived page using the ArquivoClient.
+ *
+ * Validates that the URL is from arquivo.pt (SSRF protection), then calls
+ * client.fetchPage() with token truncation. Logs a warning if operation exceeds
+ * 5 seconds to signal potential performance issues.
+ *
+ * @param client - ArquivoClient instance (already configured with throttling/retry)
+ * @param params.archive_url - Full Arquivo.pt archive URL; must belong to arquivo.pt domain
+ * @param params.max_tokens - Maximum tokens to return; defaults to 4000, clamped 100–16000
+ * @returns MCP content object with a single text field containing formatted output
+ * @throws Error if validation fails, URL is not from arquivo.pt, or fetch fails
+ *
+ * Output format:
+ *   [Conteúdo de: URL — TITLE]
+ *   TÍTULO: ...
+ *   TEXTO: ...
+ *   [Truncado. Tamanho original: X KB] if content was truncated
+ *
+ * Side effects:
+ *   - Logs warning if request duration > 5000ms
+ *   - Logs error on failure with params for debugging
  */
 export async function getPageContentTool(
   client: ArquivoClient,
