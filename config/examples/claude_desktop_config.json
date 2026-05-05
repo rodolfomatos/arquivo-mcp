@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "arquivo": {
+      "command": "arquivo-mcp"
+    }
+  }
+}
