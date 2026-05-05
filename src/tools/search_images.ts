@@ -2,6 +2,8 @@ import type { ArquivoClient } from '../client/ArquivoClient.js';
 import { formatImageResults } from './common.js';
 import { logger } from '../utils/logger.js';
 import { isValidDateRange } from '../utils/validation.js';
+import { truncateToTokens } from '../utils/tokens.js';
+import type { SearchImagesParams } from './types.js';
 
 /**
  * Tool: search_images
@@ -9,13 +11,7 @@ import { isValidDateRange } from '../utils/validation.js';
  */
 export async function searchImagesTool(
   client: ArquivoClient,
-  params: {
-    query: string;
-    from?: string;
-    to?: string;
-    maxItems?: number;
-    offset?: number;
-  },
+  params: SearchImagesParams,
 ): Promise<{ content: Array<{ text: string }> }> {
   // Validation
   if (!params.query || params.query.trim() === '') {
@@ -29,7 +25,7 @@ export async function searchImagesTool(
   }
 
   const maxItems = Math.max(1, Math.min(params.maxItems ?? 10, 20));
-  const offset = params.offset ?? 0;
+  const offset = Math.max(0, params.offset ?? 0);
 
   try {
     const results = await client.searchImages({
@@ -42,7 +38,10 @@ export async function searchImagesTool(
 
     const output = formatImageResults(params.query.trim(), results, offset);
 
-    return { content: [{ text: output }] };
+    // Ensure output does not exceed 8000 tokens (RNF-02)
+    const truncated = truncateToTokens(output, 8000);
+
+    return { content: [{ text: truncated }] };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logger.error('search_images error', { error: message, params });

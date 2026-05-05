@@ -1,5 +1,19 @@
 import type { ArquivoClient } from '../client/ArquivoClient.js';
 import { logger } from '../utils/logger.js';
+import type { GetPageContentParams } from './types.js';
+
+/**
+ * Validate that URL belongs to Arquivo.pt to prevent SSRF.
+ */
+function isArquivoUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    const hostname = parsed.hostname.toLowerCase();
+    return hostname === 'arquivo.pt' || hostname.endsWith('.arquivo.pt');
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Tool: get_page_content
@@ -7,22 +21,32 @@ import { logger } from '../utils/logger.js';
  */
 export async function getPageContentTool(
   client: ArquivoClient,
-  params: {
-    archive_url: string;
-    max_tokens?: number;
-  },
+  params: GetPageContentParams,
 ): Promise<{ content: Array<{ text: string }> }> {
   // Validation
   if (!params.archive_url || params.archive_url.trim() === '') {
     throw new Error('Archive URL parameter is required');
   }
+  const archiveUrl = params.archive_url.trim();
+  if (!isArquivoUrl(archiveUrl)) {
+    throw new Error('Archive URL must be from arquivo.pt domain');
+  }
 
   const maxTokens = Math.max(100, Math.min(params.max_tokens ?? 4000, 16000));
 
   try {
-    const result = await client.fetchPage(params.archive_url.trim(), maxTokens);
+    const startTime = Date.now();
+    const result = await client.fetchPage(archiveUrl, maxTokens);
+    const duration = Date.now() - startTime;
 
-    let output = `[Conteúdo de: ${params.archive_url.trim()} — ${result.title}]\n\n`;
+    if (duration > 5000) {
+      logger.warn('get_page_content took >5s', { duration, archiveUrl });
+    }
+
+    let output = `[Conteúdo de: ${archiveUrl} — ${result.title}]\n\n`;
+    if (duration > 5000) {
+      output += `[AVISO: Operação demorou ${(duration / 1000).toFixed(1)}s]\n\n`;
+    }
     output += `TÍTULO: ${result.title}\n\n`;
     output += `TEXTO:\n${result.content}`;
 

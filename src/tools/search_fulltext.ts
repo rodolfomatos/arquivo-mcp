@@ -2,6 +2,8 @@ import type { ArquivoClient } from '../client/ArquivoClient.js';
 import { formatSearchResults } from './common.js';
 import { logger } from '../utils/logger.js';
 import { isValidDateRange } from '../utils/validation.js';
+import { truncateToTokens } from '../utils/tokens.js';
+import type { SearchFulltextParams } from './types.js';
 
 /**
  * Tool: search_fulltext
@@ -9,15 +11,7 @@ import { isValidDateRange } from '../utils/validation.js';
  */
 export async function searchFulltextTool(
   client: ArquivoClient,
-  params: {
-    query: string;
-    from?: string;
-    to?: string;
-    site?: string;
-    type?: string;
-    maxItems?: number;
-    offset?: number;
-  },
+  params: SearchFulltextParams,
 ): Promise<{ content: Array<{ text: string }> }> {
   // Validation
   if (!params.query || params.query.trim() === '') {
@@ -31,7 +25,7 @@ export async function searchFulltextTool(
   }
 
   const maxItems = Math.max(1, Math.min(params.maxItems ?? 10, 50));
-  const offset = params.offset ?? 0;
+  const offset = Math.max(0, params.offset ?? 0);
 
   try {
     const results = await client.searchFulltext({
@@ -52,7 +46,10 @@ export async function searchFulltextTool(
       offset,
     );
 
-    return { content: [{ text: output }] };
+    // Ensure output does not exceed 8000 tokens (RNF-02)
+    const truncated = truncateToTokens(output, 8000);
+
+    return { content: [{ text: truncated }] };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logger.error('search_fulltext error', { error: message, params });

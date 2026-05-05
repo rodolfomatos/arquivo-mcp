@@ -2,6 +2,8 @@ import type { ArquivoClient } from '../client/ArquivoClient.js';
 import { formatVersionResults } from './common.js';
 import { logger } from '../utils/logger.js';
 import { isValidDateRange } from '../utils/validation.js';
+import { truncateToTokens } from '../utils/tokens.js';
+import type { GetUrlVersionsParams } from './types.js';
 
 /**
  * Tool: get_url_versions
@@ -9,13 +11,7 @@ import { isValidDateRange } from '../utils/validation.js';
  */
 export async function getUrlVersionsTool(
   client: ArquivoClient,
-  params: {
-    url: string;
-    from?: string;
-    to?: string;
-    maxItems?: number;
-    offset?: number;
-  },
+  params: GetUrlVersionsParams,
 ): Promise<{ content: Array<{ text: string }> }> {
   // Validation
   if (!params.url || params.url.trim() === '') {
@@ -29,7 +25,7 @@ export async function getUrlVersionsTool(
   }
 
   const maxItems = Math.max(1, Math.min(params.maxItems ?? 20, 100));
-  const offset = params.offset ?? 0;
+  const offset = Math.max(0, params.offset ?? 0);
 
   try {
     const results = await client.getUrlVersions({
@@ -42,7 +38,10 @@ export async function getUrlVersionsTool(
 
     const output = formatVersionResults(params.url.trim(), results, offset);
 
-    return { content: [{ text: output }] };
+    // Ensure output does not exceed 8000 tokens (RNF-02)
+    const truncated = truncateToTokens(output, 8000);
+
+    return { content: [{ text: truncated }] };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logger.error('get_url_versions error', { error: message, params });

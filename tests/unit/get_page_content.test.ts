@@ -23,6 +23,25 @@ describe('getPageContentTool', () => {
     );
   });
 
+  it('should reject URLs not from arquivo.pt', async () => {
+    await expect(
+      getPageContentTool(mockClient, { archive_url: 'http://example.com/page' } as any),
+    ).rejects.toThrow('Archive URL must be from arquivo.pt domain');
+  });
+
+  it('should accept valid arquivo.pt URLs', async () => {
+    mockClient.fetchPage = vi.fn().mockResolvedValue({
+      title: 'Title',
+      content: 'Content',
+      originalLength: 1000,
+    });
+
+    // Should not throw
+    await getPageContentTool(mockClient, {
+      archive_url: 'https://arquivo.pt/wayback/20200101/http://example.com/page',
+    });
+  });
+
   it('should clamp max_tokens between 100 and 16000', async () => {
     mockClient.fetchPage = vi.fn().mockResolvedValue({
       title: 'Title',
@@ -30,11 +49,23 @@ describe('getPageContentTool', () => {
       originalLength: 1000,
     });
 
-    await getPageContentTool(mockClient, { archive_url: 'http://url.com', max_tokens: 20000 });
-    expect(mockClient.fetchPage).toHaveBeenCalledWith('http://url.com', 16000);
+    await getPageContentTool(mockClient, {
+      archive_url: 'https://arquivo.pt/wayback/20200101/http://url.com',
+      max_tokens: 20000,
+    });
+    expect(mockClient.fetchPage).toHaveBeenCalledWith(
+      'https://arquivo.pt/wayback/20200101/http://url.com',
+      16000,
+    );
 
-    await getPageContentTool(mockClient, { archive_url: 'http://url.com', max_tokens: 10 });
-    expect(mockClient.fetchPage).toHaveBeenCalledWith('http://url.com', 100);
+    await getPageContentTool(mockClient, {
+      archive_url: 'https://arquivo.pt/wayback/20200101/http://url.com',
+      max_tokens: 10,
+    });
+    expect(mockClient.fetchPage).toHaveBeenCalledWith(
+      'https://arquivo.pt/wayback/20200101/http://url.com',
+      100,
+    );
   });
 
   it('should format output correctly', async () => {
@@ -45,11 +76,15 @@ describe('getPageContentTool', () => {
       originalLength: fullContent.length,
     });
 
-    const result = await getPageContentTool(mockClient, { archive_url: 'http://test.com/page' });
+    const result = await getPageContentTool(mockClient, {
+      archive_url: 'https://arquivo.pt/wayback/20200101/http://test.com/page',
+    });
 
     expect(result.content).toHaveLength(1);
     const text = result.content[0].text;
-    expect(text).toContain('[Conteúdo de: http://test.com/page — Test Page]');
+    expect(text).toContain(
+      '[Conteúdo de: https://arquivo.pt/wayback/20200101/http://test.com/page — Test Page]',
+    );
     expect(text).toContain('TÍTULO: Test Page');
     expect(text).toContain('TEXTO:\nThis is the page content.');
     expect(text).not.toContain('Truncado'); // not truncated
@@ -62,7 +97,9 @@ describe('getPageContentTool', () => {
       originalLength: 50000,
     });
 
-    const result = await getPageContentTool(mockClient, { archive_url: 'http://test.com/long' });
+    const result = await getPageContentTool(mockClient, {
+      archive_url: 'https://arquivo.pt/wayback/20200101/http://test.com/long',
+    });
 
     const text = result.content[0].text;
     expect(text).toContain('Truncado');
@@ -73,7 +110,9 @@ describe('getPageContentTool', () => {
     mockClient.fetchPage = vi.fn().mockRejectedValue(new Error('Timeout'));
 
     await expect(
-      getPageContentTool(mockClient, { archive_url: 'http://test.com' }),
+      getPageContentTool(mockClient, {
+        archive_url: 'https://arquivo.pt/wayback/20200101/http://test.com',
+      }),
     ).rejects.toThrow('Failed to fetch page content: Timeout');
   });
 });

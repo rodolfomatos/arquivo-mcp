@@ -3,7 +3,7 @@ import { ArquivoClient } from 'src/client/ArquivoClient';
 
 describe('Integration: search_images', () => {
   it('should return image results for a query', async () => {
-    const client = new ArquivoClient();
+    const client = new ArquivoClient({ timeoutMs: 60000 }); // 60s
     const results = await client.searchImages({ query: 'Lisboa', maxItems: 5 });
     expect(Array.isArray(results)).toBe(true);
     if (results.length > 0) {
@@ -13,5 +13,5 @@ describe('Integration: search_images', () => {
       expect(first.pageLink).toBeDefined();
       expect(first.tstamp).toBeDefined();
     }
-  });
+  }, 120000); // 120s
 });

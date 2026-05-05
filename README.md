@@ -77,6 +77,10 @@ Add to `.cursor/mcp.json`:
 
 Restart Cursor after configuring.
 
+### Environment Variables
+
+- `LOG_LEVEL` — Set the minimum log level for structured JSON output to stderr. Options: `debug`, `info`, `warn`, `error`. Default: `info`. Useful for troubleshooting; logs are sent to stderr and do not interfere with MCP communication on stdout.
+
 ## Usage
 
 Once configured, the tools are available in your LLM chat. Example prompts:
@@ -212,4 +216,5 @@ MIT
 
 - [Arquivo.pt](https://arquivo.pt) — preserving Portuguese web since 1996
 - [Model Context Protocol](https://modelcontextprotocol.io) — standard for LLM tool integration
+
 # arquivo-mcp

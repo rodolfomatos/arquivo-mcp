@@ -3,7 +3,7 @@ import { ArquivoClient } from 'src/client/ArquivoClient';
 
 describe('Integration: get_url_versions', () => {
   it('should return versions for a known URL', async () => {
-    const client = new ArquivoClient();
+    const client = new ArquivoClient({ timeoutMs: 60000 }); // 60s
     const results = await client.getUrlVersions({ url: 'http://www.publico.pt', maxItems: 10 });
     expect(Array.isArray(results)).toBe(true);
     if (results.length > 0) {
@@ -12,5 +12,5 @@ describe('Integration: get_url_versions', () => {
       expect(first.status).toBeDefined();
       expect(first.link).toBeDefined();
     }
-  });
+  }, 120000);
 });

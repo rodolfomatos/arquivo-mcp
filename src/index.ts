@@ -9,6 +9,10 @@ import {
   getPageContentTool,
   searchImagesTool,
 } from './tools/index.js';
+import type { SearchFulltextParams } from './tools/types.js';
+import type { GetUrlVersionsParams } from './tools/types.js';
+import type { GetPageContentParams } from './tools/types.js';
+import type { SearchImagesParams } from './tools/types.js';
 import { logger } from './utils/logger.js';
 
 async function main() {
@@ -169,26 +173,22 @@ async function main() {
 
     try {
       if (name === 'search_fulltext') {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const result = await searchFulltextTool(client, args as any);
+        const result = await searchFulltextTool(client, args as unknown as SearchFulltextParams);
         return { content: result.content };
       }
 
       if (name === 'get_url_versions') {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const result = await getUrlVersionsTool(client, args as any);
+        const result = await getUrlVersionsTool(client, args as unknown as GetUrlVersionsParams);
         return { content: result.content };
       }
 
       if (name === 'get_page_content') {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const result = await getPageContentTool(client, args as any);
+        const result = await getPageContentTool(client, args as unknown as GetPageContentParams);
         return { content: result.content };
       }
 
       if (name === 'search_images') {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const result = await searchImagesTool(client, args as any);
+        const result = await searchImagesTool(client, args as unknown as SearchImagesParams);
         return { content: result.content };
       }
 

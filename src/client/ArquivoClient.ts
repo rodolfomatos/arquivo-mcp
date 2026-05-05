@@ -4,6 +4,7 @@ import { stripHtml } from '../utils/html.js';
 import { truncateToTokens } from '../utils/tokens.js';
 import { logger } from '../utils/logger.js';
 import { decodeResponse } from '../utils/encoding.js';
+import { HttpError } from '../utils/HttpError.js';
 import * as cheerio from 'cheerio';
 
 export interface SearchResult {
@@ -97,10 +98,7 @@ export class ArquivoClient {
           });
 
           if (!res.ok) {
-            const error = new Error(`HTTP ${res.status} ${res.statusText}`);
-            // @ts-expect-error — attaching status for retry logic
-            error.response = { status: res.status };
-            throw error;
+            throw new HttpError(res.status, res.headers, `HTTP ${res.status} ${res.statusText}`);
           }
 
           return res.json() as Promise<T>;
