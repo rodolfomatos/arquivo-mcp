@@ -27,7 +27,7 @@ import type { SearchImagesParams } from './types.js';
 export async function searchImagesTool(
   client: ArquivoClient,
   params: SearchImagesParams,
-): Promise<{ content: Array<{ text: string }> }> {
+): Promise<{ content: Array<{ type: string; text: string }> }> {
   // Validation
   if (!params.query || params.query.trim() === '') {
     throw new Error('Query parameter is required');
@@ -56,7 +56,7 @@ export async function searchImagesTool(
     // Ensure output does not exceed 8000 tokens (RNF-02)
     const truncated = truncateToTokens(output, 8000);
 
-    return { content: [{ text: truncated }] };
+    return { content: [{ type: 'text', text: truncated }] };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logger.error('search_images error', { error: message, params });

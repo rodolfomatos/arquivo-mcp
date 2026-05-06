@@ -27,13 +27,13 @@ build:
 test:
 	@$(AES_TEST)
 
-lint:
-	@$(AES_LINT)
+integration-test:
+	@npm run test:integration
+
+lint: lint-check
 
 format:
 	@$(AES_FORMAT)
-
-check: docs-check code-check lint-check test-check
 
 docs-check:
 	@# Verify required docs exist with substantive content (all must pass)
@@ -54,12 +54,12 @@ code-check:
 	@test -d src
 	@grep -R "TODO:" src/ 2>/dev/null || true
 
-test-check:
-	@# For now, just run the test script (placeholder until real tests exist)
-	@$(AES_TEST)
+test-check: test
 
 lint-check:
 	@$(AES_LINT)
+
+check: docs-check code-check lint-check test-check
 
 doctor:
 	@echo "Language: $(AES_LANGUAGE)"
@@ -74,10 +74,11 @@ help:
 	@echo "  make setup      - Install dependencies (npm ci)"
 	@echo "  make build      - Build TypeScript to dist/"
 	@echo "  make run        - Start the MCP server"
-	@echo "  make test       - Run tests"
+	@echo "  make test       - Run unit tests"
+	@echo "  make integration-test - Run integration tests (hits real API)"
 	@echo "  make lint       - Check code quality with ESLint"
 	@echo "  make format     - Format code with Prettier"
-	@echo "  make check      - Run ALL quality gates"
+	@echo "  make check      - Run ALL quality gates (tests + lint + docs)"
 	@echo "  make doctor     - System diagnostics"
 	@echo ""
 	@echo "Integration & Deployment:"
@@ -95,7 +96,7 @@ help:
 	@echo "  make uninstall-opencode - Delete opencode.json from project"
 
 # -------------------------------------------------
-# Claude Desktop installation
+# Claude Desktop installation (merges with existing config)
 # -------------------------------------------------
 install-claude:
 	@echo "📦 Installing arquivo-mcp globally..."
@@ -105,15 +106,12 @@ install-claude:
 	@mkdir -p ~/.config/Claude
 	@CONFIG_FILE=~/.config/Claude/claude_desktop_config.json; \
 	if [ -f "$$CONFIG_FILE" ]; then \
-	  echo "⚠️  Config file already exists. Backing up to $$CONFIG_FILE.bak"; \
+	  echo "⚠️  Config file exists. Merging arquivo entry (backup at $$CONFIG_FILE.bak)"; \
 	  cp "$$CONFIG_FILE" "$$CONFIG_FILE.bak"; \
+	  node -e "const fs=require('fs');const f='$$CONFIG_FILE';let c=JSON.parse(fs.readFileSync(f,'utf8'));if(!c.mcpServers)c.mcpServers={};c.mcpServers.arquivo={command:'arquivo-mcp'};fs.writeFileSync(f,JSON.stringify(c,null,2)+'\n')"; \
+	else \
+	  node -e "const fs=require('fs');const f='$$CONFIG_FILE';fs.writeFileSync(f,JSON.stringify({mcpServers:{arquivo:{command:'arquivo-mcp'}}},null,2)+'\n')"; \
 	fi; \
-	echo '{' > "$$CONFIG_FILE"; \
-	echo '  "mcpServers": {' >> "$$CONFIG_FILE"; \
-	echo '    "arquivo": {' >> "$$CONFIG_FILE"; \
-	echo '      "command": "arquivo-mcp"' >> "$$CONFIG_FILE"; \
-	echo '    }' >> "$$CONFIG_FILE"; \
-	echo '  }' >> "$$CONFIG_FILE"; \
 	echo "✅ Claude Desktop configured. Restart Claude Desktop to load the new tool."
 	@echo ""
 	@echo "Note: You can adjust rate limiting via environment variables:"
@@ -126,28 +124,18 @@ install-claude:
 install-opencode:
 	@echo "⚙️  Generating opencode.json for OpenCode..."
 	@test -f dist/index.js || { echo "❌ Build not found. Run 'make build' first."; exit 1; }
-	@read -p "Set MAX_REQUESTS_PER_SECOND [1]: " rps; \
+	@install_dir="$(OPENCODE_INSTALL_DIR)"; \
+	if [ -z "$$install_dir" ]; then install_dir="$(CURDIR)"; fi; \
+	mkdir -p "$$install_dir"; \
+	read -p "Set MAX_REQUESTS_PER_SECOND [1]: " rps; \
 	rps=$${rps:-1}; \
 	read -p "Set LOG_LEVEL [info]: " loglevel; \
 	loglevel=$${loglevel:-info}; \
 	abs_path="$(CURDIR)/dist/index.js"; \
-	echo "{"; \
-	echo '  "$$schema": "https://opencode.ai/config.json",'; \
-	echo '  "mcp": {'; \
-	echo '    "arquivo": {'; \
-	echo '      "type": "local",'; \
-	echo '      "command": ["node", "'$$abs_path'"],'; \
-	echo '      "enabled": true,'; \
-	echo '      "environment": {'; \
-	echo '        "MAX_REQUESTS_PER_SECOND": "'$$rps'",'; \
-	echo '        "LOG_LEVEL": "'$$loglevel'"'; \
-	echo '      }'; \
-	echo '    }'; \
-	echo '  }'; \
-	echo "}" > opencode.json; \
+	node -e "const fs=require('fs');fs.writeFileSync('$$install_dir/opencode.json',JSON.stringify({'\$$schema':'https://opencode.ai/config.json',mcp:{arquivo:{type:'local',command:['node','$$abs_path'],enabled:true,environment:{MAX_REQUESTS_PER_SECOND:'$$rps',LOG_LEVEL:'$$loglevel'}}}},null,2)+'\n')"; \
 	echo ""; \
-	echo "✅ Created opencode.json in $(CURDIR)"; \
-	echo "📝 Run 'opencode' in this directory to start."; \
+	echo "✅ Created opencode.json in $$install_dir"; \
+	echo "📝 Run 'opencode' in that directory to start."; \
 	echo "🔧 You can edit opencode.json later to change settings."
 
 # -------------------------------------------------
@@ -190,24 +178,13 @@ mcp-start-systemd:
 	  echo "⚠️  Service already exists. Backing up to $$service_file.bak"; \
 	  sudo mv "$$service_file" "$$service_file.bak"; \
 	fi; \
-	sudo tee "$$service_file" > /dev/null <<EOF; \
-[Unit]; \
-Description=Arquivo MCP Server; \
-After=network.target; \
-\
-[Service]; \
-Type=simple; \
-User=$$run_user; \
-WorkingDirectory=$(CURDIR); \
-ExecStart=$(CURDIR)/$(MCP_BIN); \
-Restart=on-failure; \
-RestartSec=10; \
-StandardOutput=journal; \
-StandardError=journal; \
-\
-[Install]; \
-WantedBy=multi-user.target; \
-EOF; \
+	node -e "const fs=require('fs');fs.writeFileSync('/tmp/arquivo-mcp.service','[Unit]\nDescription=Arquivo MCP Server\nAfter=network.target\n\n[Service]\nType=simple\nUser='+'$$run_user'+'\nWorkingDirectory=$(CURDIR)\nExecStart=/usr/bin/node $(CURDIR)/dist/index.js\nRestart=on-failure\nRestartSec=10\nStandardOutput=journal\nStandardError=journal\n\n[Install]\nWantedBy=multi-user.target\n')"; \
+	sudo mv /tmp/arquivo-mcp.service "$$service_file"; \
+	sudo systemctl daemon-reload; \
+	sudo systemctl enable --now arquivo-mcp; \
+	echo "✅ systemd service installed and started."; \
+	echo "   Use: sudo systemctl status arquivo-mcp"; \
+	echo "   Stop: sudo systemctl stop arquivo-mcp"
 	sudo systemctl daemon-reload; \
 	sudo systemctl enable --now arquivo-mcp; \
 	echo "✅ systemd service installed and started."; \

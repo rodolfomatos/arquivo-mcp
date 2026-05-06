@@ -1,6 +1,7 @@
 /**
  * Decode response body with proper charset handling.
- * If charset is not specified in Content-Type, fallback to windows-1252 for legacy pages.
+ * Defaults to UTF-8 (Arquivo.pt standard); falls back to windows-1252 for legacy pages
+ * when the declared charset is unsupported by TextDecoder.
  *
  * Algorithm:
  *   1. Read response as ArrayBuffer
@@ -16,12 +17,11 @@ export async function decodeResponse(res: Response): Promise<string> {
   const buffer = await res.arrayBuffer();
   const contentType = res.headers.get('content-type') || '';
   const charsetMatch = /charset=([^;]+)/i.exec(contentType);
-  const charset = charsetMatch ? charsetMatch[1].trim() : 'windows-1252';
+  const charset = charsetMatch ? charsetMatch[1].trim() : 'utf-8';
 
   try {
     return new TextDecoder(charset).decode(buffer);
   } catch {
-    // If charset is unsupported, fallback to UTF-8
     return new TextDecoder('utf-8').decode(buffer);
   }
 }

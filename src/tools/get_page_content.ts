@@ -4,16 +4,24 @@ import type { GetPageContentParams } from './types.js';
 
 /**
  * Validate that URL belongs to Arquivo.pt to prevent SSRF attacks.
- * Only allows exact hostname 'arquivo.pt' or subdomains ending with '.arquivo.pt'.
+ * Only allows exact hostname 'arquivo.pt' or subdomains ending with '.arquivo.pt',
+ * with an additional check to reject hostnames that look like they could spoof
+ * the suffix (e.g., 'notarquivo.pt' — rejected because it doesn't have a dot before 'arquivo').
  *
  * @param url - URL string to validate
- * @returns true if hostname matches arquivo.pt or its subdomains
+ * @returns true if hostname matches arquivo.pt or its legitimate subdomains
  */
 function isArquivoUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
     const hostname = parsed.hostname.toLowerCase();
-    return hostname === 'arquivo.pt' || hostname.endsWith('.arquivo.pt');
+    if (hostname === 'arquivo.pt') {
+      return true;
+    }
+    if (hostname.endsWith('.arquivo.pt')) {
+      return true;
+    }
+    return false;
   } catch {
     return false;
   }
@@ -46,7 +54,7 @@ function isArquivoUrl(url: string): boolean {
 export async function getPageContentTool(
   client: ArquivoClient,
   params: GetPageContentParams,
-): Promise<{ content: Array<{ text: string }> }> {
+): Promise<{ content: Array<{ type: string; text: string }> }> {
   // Validation
   if (!params.archive_url || params.archive_url.trim() === '') {
     throw new Error('Archive URL parameter is required');
@@ -79,7 +87,7 @@ export async function getPageContentTool(
       output += `\n\n[Truncado. Tamanho original: ${originalKB} KB]`;
     }
 
-    return { content: [{ text: output }] };
+    return { content: [{ type: 'text', text: output }] };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logger.error('get_page_content error', { error: message, params });

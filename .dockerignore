@@ -1,0 +1,15 @@
+node_modules
+dist
+.git
+.gitignore
+*.md
+!README.md
+docs/
+Makefile
+.github/
+*.pid
+mcp.pid
+logs/
+opencode.json
+.env
+.env.*

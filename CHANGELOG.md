@@ -2,51 +2,35 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
 ### Added
 
-- Environment variable configuration: `MAX_REQUESTS_PER_SECOND` to tune rate limiting
-- `LOG_LEVEL` documented for controlling structured log verbosity
+- Initial public release of arquivo-mcp
+- MCP server for Arquivo.pt with 4 tools: search_fulltext, get_url_versions, get_page_content, search_images
+- Adaptive timeout (30–120s) based on maxItems
+- Retry logic with exponential backoff (4 retries, 2s base)
+- Enhanced error handling for network errors (TypeError, AbortError)
+- Structured JSON logging via stderr
+- Environment configuration: MAX_REQUESTS_PER_SECOND, MAX_RETRIES, TIMEOUT_MS, LOG_LEVEL
+- Keep-alive HTTP connections for better performance
+- SSRF protection for get_page_content ( arquivo.pt domain only)
+- Token truncation (8000 tokens) to respect LLM context limits
+- Installation guides for Claude Desktop and OpenCode
+- GitHub Actions CI (lint, test, build, docs-check)
+- Comprehensive documentation: VISION.md, PERSONAS.md, REQUIREMENTS.md, ROADMAP.md, DEMONSTRATION.md, AGENTS.md
 
 ### Fixed
 
-- SSRF vulnerability in `get_page_content` by validating `arquivo.pt` domain
-- Pagination offset now clamped to non-negative values (prevents API errors)
-- Latency warning logged and displayed when `get_page_content` exceeds 5s
-- Retry logic now includes jitter (±20%) and respects `Retry-After` header
-- `HttpError` class replaces unsafe casts (`@ts-expect-error`)
-- Output truncation: all paginated tools limited to 8000 tokens (RNF-02)
-- Unit test coverage expanded: `validation.test.ts`, `encoding.test.ts`, `logger.test.ts`
+- Missing `type: 'text'` in error responses (MCP validation)
+- Page content extraction: multiple selectors for archived text links
+- Prettier formatting issues across codebase
 
-### Technical improvements
+---
 
-- Graceful shutdown: handles SIGINT/SIGTERM, stops throttler
-- Integration test timeouts increased to 90–180s for stability
-- Type safety: removed `any` casts, created `src/tools/types.ts` for parameter interfaces
-- Build, lint, and tests passing via `make check`
+## [0.1.0] - 2025-05-06
 
-### Known issues
-
-- Moderate vulnerability in `ip-address` (transitive via MCP SDK). Awaiting upstream fix.
-
-## [1.0.0] - Planned
-
-Initial public release targeting production use with Claude Desktop and Cursor.
-
-### Added
-
-- Full documentation (README, VISION, PERSONAS, REQUIREMENTS, ROADMAP)
-- CLI accessibility via `npx arquivo-mcp` and global `npm install -g`
-- Configuration examples for Claude Desktop and Cursor
-- GitHub Actions CI (lint + build + unit tests)
-
-## [0.1.0] - YYYY-MM-DD (Development)
-
-Initial development milestone. Not published.
-
-- Project inception
-- Basic MCP server structure
-- ArquivoClient prototype
+Initial development release. Internal testing.

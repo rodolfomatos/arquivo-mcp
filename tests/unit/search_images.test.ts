@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { searchImagesTool } from 'src/tools/search_images';
+import type { ArquivoClient } from 'src/client/ArquivoClient';
 
 describe('searchImagesTool', () => {
-  let mockClient: any;
+  let mockClient: Pick<ArquivoClient, 'searchImages'>;
 
   beforeEach(() => {
     mockClient = {
@@ -11,13 +12,13 @@ describe('searchImagesTool', () => {
   });
 
   it('should throw if query is missing', async () => {
-    await expect(searchImagesTool(mockClient, {} as any)).rejects.toThrow(
-      'Query parameter is required',
-    );
+    await expect(
+      searchImagesTool(mockClient as ArquivoClient, { query: undefined as unknown as string }),
+    ).rejects.toThrow('Query parameter is required');
   });
 
   it('should throw if query is empty', async () => {
-    await expect(searchImagesTool(mockClient, { query: '   ' } as any)).rejects.toThrow(
+    await expect(searchImagesTool(mockClient as ArquivoClient, { query: '   ' })).rejects.toThrow(
       'Query parameter is required',
     );
   });
@@ -25,10 +26,10 @@ describe('searchImagesTool', () => {
   it('should clamp maxItems between 1 and 20', async () => {
     mockClient.searchImages = vi.fn().mockResolvedValue([]);
 
-    await searchImagesTool(mockClient, { query: 'test', maxItems: 30 });
+    await searchImagesTool(mockClient as ArquivoClient, { query: 'test', maxItems: 30 });
     expect(mockClient.searchImages).toHaveBeenCalledWith(expect.objectContaining({ maxItems: 20 }));
 
-    await searchImagesTool(mockClient, { query: 'test', maxItems: 0 });
+    await searchImagesTool(mockClient as ArquivoClient, { query: 'test', maxItems: 0 });
     expect(mockClient.searchImages).toHaveBeenCalledWith(expect.objectContaining({ maxItems: 1 }));
   });
 
@@ -44,7 +45,7 @@ describe('searchImagesTool', () => {
       },
     ]);
 
-    const result = await searchImagesTool(mockClient, { query: 'test' });
+    const result = await searchImagesTool(mockClient as ArquivoClient, { query: 'test' });
 
     expect(result.content).toHaveLength(1);
     expect(result.content[0].text).toContain('[1 imagens para "test"]');
@@ -57,7 +58,7 @@ describe('searchImagesTool', () => {
   it('should propagate errors with friendly message', async () => {
     mockClient.searchImages = vi.fn().mockRejectedValue(new Error('Network error'));
 
-    await expect(searchImagesTool(mockClient, { query: 'test' })).rejects.toThrow(
+    await expect(searchImagesTool(mockClient as ArquivoClient, { query: 'test' })).rejects.toThrow(
       'Image search failed: Network error',
     );
   });

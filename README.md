@@ -1,369 +1,174 @@
 # arquivo-mcp
 
-**MCP (Model Context Protocol) server for [Arquivo.pt](https://arquivo.pt) — the Portuguese web archive.**
+**MCP server for Arquivo.pt — access Portuguese web archive from LLMs**
 
-Access decades of archived Portuguese web content directly from LLMs like Claude, Cursor, and any MCP-compatible client. Search full-text, retrieve page versions, fetch content, and find historical images without leaving your conversation.
+A Model Context Protocol (MCP) server that allows Claude Desktop, OpenCode, and other MCP clients to search and retrieve historical web content from [Arquivo.pt](https://arquivo.pt), the Portuguese web archive.
+
+---
 
 ## Features
 
-- `search_fulltext` — Full-text search with date and site filters
-- `get_url_versions` — List all archived versions of a specific URL
-- `get_page_content` — Extract text content from an archived page
-- `search_images` — Search historical images
+- **Full-text search**: Search historical web pages by query, date range, domain, and MIME type
+- **URL versions**: List all archived versions of a specific URL
+- **Page content**: Fetch extracted text from archived pages (best-effort)
+- **Image search**: Find historical images with metadata
 
-## Quick Start
+All tools return clean, LLM-friendly text output, respecting token limits (default 8000 tokens).
 
-### Installation
+---
 
-```bash
-# Using npm (global install)
-npm install -g arquivo-mcp
-
-# Or use npx (no install needed)
-npx arquivo-mcp
-```
-
-### Build from source
-
-```bash
-git clone https://github.com/yourusername/arquivo-mcp
-cd arquivo-mcp
-make setup
-make build
-```
-
-## Configuration
+## Installation
 
 ### Claude Desktop
 
-#### Manual configuration
+```bash
+# Global install
+npm install -g arquivo-mcp
 
-Add to your `claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "arquivo": {
-      "command": "arquivo-mcp"
-    }
-  }
-}
+# Configure Claude Desktop
+make install-claude
 ```
 
-#### Automated setup
+Restart Claude Desktop. The tools will appear automatically.
 
-You can also let `make` configure Claude Desktop automatically:
+### OpenCode (local project)
 
 ```bash
-# Install globally and create config entry
-make install-claude
-
-# Then restart Claude Desktop
+# In your project directory
+git clone https://github.com/yourusername/arquivo-mcp.git
+cd arquivo-mcp
+make setup
+make build
+make install-opencode
 ```
 
-This performs a global `npm install -g` and writes the MCP server entry to `~/.config/Claude/claude_desktop_config.json`.
+Run `opencode` in the project directory to start the server.
 
-If installed locally without global bin:
+---
 
-```json
-{
-  "mcpServers": {
-    "arquivo": {
-      "command": "node",
-      "args": ["/path/to/arquivo-mcp/dist/index.js"]
-    }
-  }
-}
-```
+## Configuration
 
-### Cursor
+Environment variables:
 
-Add to `.cursor/mcp.json`:
+| Variable                  | Default  | Description                                                                               |
+| ------------------------- | -------- | ----------------------------------------------------------------------------------------- |
+| `MAX_REQUESTS_PER_SECOND` | `1`      | Rate limit for outgoing API calls (Arquivo.pt limit)                                      |
+| `MAX_RETRIES`             | `4`      | Number of retry attempts on network errors                                                |
+| `TIMEOUT_MS`              | `120000` | Base timeout in milliseconds (adaptive: max(base, 30s + maxItems×600ms), clamped 30–180s) |
+| `LOG_LEVEL`               | `info`   | Logging level: `debug`, `info`, `warn`, `error`                                           |
 
-```json
-{
-  "mcpServers": {
-    "arquivo": {
-      "command": "arquivo-mcp"
-    }
-  }
-}
-```
+---
 
-Restart Cursor after configuring.
+## Tools
 
-### Environment Variables
+All tools are exposed via MCP `call_tool` requests. See [DEMONSTRATION.md](docs/DEMONSTRATION.md) for usage examples.
 
-- `LOG_LEVEL` — Set the minimum log level for structured JSON output to stderr. Options: `debug`, `info`, `warn`, `error`. Default: `info`. Useful for troubleshooting; logs are sent to stderr and do not interfere with MCP communication on stdout.
+### 1. `arquivo_search_fulltext`
 
-## Usage
+Full-text search across the Portuguese web archive.
 
-Once configured, the tools are available in your LLM chat. Example prompts:
+**Parameters:**
 
-```
-"Search for news about Portugal in 2008"
-→ LLM uses search_fulltext
+- `query` (required) — search terms, supports `"exact phrases"` and `-exclusions`
+- `from` (optional) — start date (YYYY or YYYYMMDDHHMMSS)
+- `to` (optional) — end date
+- `site` (optional) — limit to specific domain (e.g., `publico.pt`)
+- `type` (optional) — MIME type filter (html, pdf, doc, etc.)
+- `maxItems` (optional) — number of results (default 10, max 50)
+- `offset` (optional) — pagination offset (default 0)
 
-"Show me all archived versions of publico.pt"
-→ LLM uses get_url_versions
+**Output:** Formatted list with title, URL, archive URL, date, and snippet.
 
-"Get the content of this archived article: https://arquivo.pt/wayback/..."
-→ LLM uses get_page_content
+### 2. `arquivo_get_url_versions`
 
-"Find images of Lisbon in the 1990s"
-→ LLM uses search_images
-```
+List all archived versions of a given URL.
 
-### Tool Parameters
+**Parameters:**
 
-#### search_fulltext
+- `url` (required) — URL to check (domain only or full URL)
+- `from` (optional) — start date filter
+- `to` (optional) — end date filter
+- `maxItems` (optional) — number of versions (default 10, max 50)
+- `offset` (optional) — pagination
 
-| Parameter  | Type   | Required | Description                                               |
-| ---------- | ------ | -------- | --------------------------------------------------------- |
-| `query`    | string | ✅       | Search terms (supports "exact phrases" and `-exclusions`) |
-| `from`     | string | ❌       | Start date (YYYY or YYYYMMDDHHMMSS). Default: 1996        |
-| `to`       | string | ❌       | End date (YYYY or YYYYMMDDHHMMSS). Default: last year     |
-| `site`     | string | ❌       | Limit to a domain (e.g., `publico.pt`)                    |
-| `type`     | string | ❌       | MIME type filter (html, pdf, doc). Default: html          |
-| `maxItems` | number | ❌       | Results per page (default: 10, max: 50)                   |
-| `offset`   | number | ❌       | Pagination offset (default: 0)                            |
+**Output:** Formatted list with timestamp, archive link, size.
 
-#### get_url_versions
+### 3. `arquivo_get_page_content`
 
-| Parameter  | Type   | Required | Description                                |
-| ---------- | ------ | -------- | ------------------------------------------ |
-| `url`      | string | ✅       | URL to look up (with or without protocol)  |
-| `from`     | string | ❌       | Start date filter                          |
-| `to`       | string | ❌       | End date filter                            |
-| `maxItems` | number | ❌       | Number of versions (default: 20, max: 100) |
-| `offset`   | number | ❌       | Pagination offset (default: 0)             |
+Retrieve text content from an archived page.
 
-#### get_page_content
+**Parameters:**
 
-| Parameter     | Type   | Required | Description                                      |
-| ------------- | ------ | -------- | ------------------------------------------------ |
-| `archive_url` | string | ✅       | Full Arquivo.pt URL (wayback link)               |
-| `max_tokens`  | number | ❌       | Max tokens to return (default: 4000, max: 16000) |
+- `archive_url` (required) — full Arquivo.pt archive URL (must be from `arquivo.pt` domain)
+- `max_tokens` (optional) — maximum tokens to return (default 4000, min 100, max 16000)
 
-#### search_images
+**Output:** Title and extracted text. Note: many pages are inside Wayback Machine iframes; extracted text may be limited. Best results with `link[rel="archived text"]` pages.
 
-| Parameter  | Type   | Required | Description                             |
-| ---------- | ------ | -------- | --------------------------------------- |
-| `query`    | string | ✅       | Search terms for images                 |
-| `from`     | string | ❌       | Start date                              |
-| `to`       | string | ❌       | End date                                |
-| `maxItems` | number | ❌       | Results per page (default: 10, max: 20) |
-| `offset`   | number | ❌       | Pagination offset (default: 0)          |
+### 4. `arquivo_search_images`
 
-## Rate Limits & Performance
+Search for historical images.
 
-Arquivo.pt API rate limit: **250 requests per 180 seconds** per IP.
+**Parameters:**
 
-This MCP server enforces:
+- `query` (required) — search terms
+- `from` (optional) — start date
+- `to` (optional) — end date
+- `maxItems` (optional) — number of images (default 10, max 50)
+- `offset` (optional) — pagination
 
-- **1 request/second** internal throttling
-- **Retry with exponential backoff** on HTTP 429 (max 2 retries)
-- **10-second timeout** on all requests
+**Output:** List with image URL, page URL, date, dimensions.
 
-If you hit rate limits, the server will automatically back off and retry.
+---
 
 ## Troubleshooting
 
-### Server not starting
+**Tools not appearing in Claude Desktop?**
 
-- Ensure `dist/index.js` exists (run `make build` first)
-- Check that port 8000 is not blocked (if using observatory mode)
+- Restart Claude Desktop after installation
+- Verify global install: `npm list -g arquivo-mcp`
+- Check `~/.config/Claude/claude_desktop_config.json` contains the entry
 
-### Tools not showing in Claude
+**Requests failing with timeout?**
 
-- Restart Claude Desktop after adding to config
-- Check `~/.config/Claude/claude_desktop_config.json` (Linux/macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows)
-- Enable MCP logging in Claude settings to see connection errors
+- Increase `TIMEOUT_MS` (e.g., `export TIMEOUT_MS=180000` before starting)
+- The Arquivo.pt API can be slow for some queries (30–60s is normal)
+- The server automatically retries transient errors up to 4 times
 
-### Slow responses
+**Rate limit errors?**
 
-- `get_page_content` can take up to 10 seconds (fetching remote pages)
-- Consider using a smaller `max_tokens` for faster responses
+- Default is 1 request/second to respect Arquivo.pt limits
+- Adjust via `MAX_REQUESTS_PER_SECOND` if needed (be polite)
+- Backoff is automatic; wait a moment and retry
 
-### Rate limited
+**`get_page_content` returns JavaScript wrapper?**
 
-- Reduce concurrent queries
-- The server handles retries automatically; wait a moment and try again
+- This is a known limitation: many archived pages load content via iframe
+- The tool attempts to extract text links; if none found, it falls back to HTML strip
+- For full page content, you may need to open the archive URL in a browser
+
+---
 
 ## Development
 
 ```bash
-# Install dependencies
-make setup
-
-# Build
-make build
-
-# Run in dev mode (watch)
-npm run dev
-
-# Lint
-make lint
-
-# Format
-make format
-
-# Run tests
-make test
-
-# Run integration tests (hits real API)
-npm run test:integration
-
-# Run all quality gates
-make check
+make setup      # npm ci
+make build      # TypeScript → dist/
+make test       # Vitest (unit only)
+make lint       # ESLint
+make format     # Prettier
+make check      # Docs + lint + tests (pre-commit)
 ```
 
-## Using with OpenCode
+See [AGENTS.md](AGENTS.md) for detailed agent instructions and gotchas.
 
-OpenCode is an open-source AI coding agent with built-in MCP support. To use `arquivo-mcp` with OpenCode:
-
-1. **Build the project** (in the cloned directory):
-
-   ```bash
-   cd /path/to/arquivo-mcp
-   make build
-   ```
-
-2. **Generate the OpenCode configuration** (from the project root):
-
-   ```bash
-   make install-opencode
-   ```
-
-   This interactively creates `opencode.json` in the current directory pointing to the built server. It asks for `MAX_REQUESTS_PER_SECOND` and `LOG_LEVEL` (defaults: 1, info).
-
-   Alternatively, you can run from anywhere using:
-
-   ```bash
-   make -C /path/to/arquivo-mcp install-opencode
-   ```
-
-3. **Run OpenCode** in that same directory:
-   ```bash
-   opencode
-   ```
-   If `opencode` is not in your PATH, install it first (https://opencode.ai/docs) or use `npx opencode`.
-
-The `arquivo_*` tools will be available. Example prompt:
-
-The `arquivo_*` tools will be available. Example prompt:
-
-```
-Use arquivo_search_fulltext to find news about Portugal in 2008
-```
-
-Alternatively, create `opencode.json` manually:
-
-```json
-{
-  "$$schema": "https://opencode.ai/config.json",
-  "mcp": {
-    "arquivo": {
-      "type": "local",
-      "command": ["node", "/absolute/path/to/arquivo-mcp/dist/index.js"],
-      "enabled": true,
-      "environment": {
-        "MAX_REQUESTS_PER_SECOND": "1",
-        "LOG_LEVEL": "info"
-      }
-    }
-  }
-}
-```
-
-## Production Deployment
-
-### Environment Variables
-
-- `MAX_REQUESTS_PER_SECOND` — Rate limit for outgoing requests to Arquivo.pt API (default: 1). The API allows ~250 requests per 180 seconds; adjust conservatively based on your workload.
-- `LOG_LEVEL` — Logging level (`debug`, `info`, `warn`, `error`). Default: `info`. Logs are written to stderr in JSON format.
-
-### Running as a Systemd Service
-
-Create `/etc/systemd/system/arquivo-mcp.service`:
-
-```ini
-[Unit]
-Description=Arquivo MCP Server
-After=network.target
-
-[Service]
-Type=simple
-User=youruser
-WorkingDirectory=/path/to/arquivo-mcp
-Environment="MAX_REQUESTS_PER_SECOND=1"
-Environment="LOG_LEVEL=info"
-ExecStart=/usr/bin/node /path/to/arquivo-mcp/dist/index.js
-Restart=on-failure
-RestartSec=10
-StandardOutput=journal
-StandardError=journal
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Then:
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now arquivo-mcp
-sudo journalctl -u arquivo-mcp -f  # view logs
-```
-
-### Docker
-
-Example `Dockerfile`:
-
-```dockerfile
-FROM node:20-alpine AS builder
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-COPY . .
-RUN npm run build
-
-FROM node:20-alpine
-WORKDIR /app
-COPY --from=builder /app/package*.json ./
-COPY --from=builder /app/dist ./dist
-RUN npm ci --only=production
-ENV MAX_REQUESTS_PER_SECOND=1
-ENV NODE_ENV=production
-CMD ["node", "dist/index.js"]
-```
-
-Build and run:
-
-```bash
-docker build -t arquivo-mcp .
-docker run -d --name arquivo-mcp --restart unless-stopped -e MAX_REQUESTS_PER_SECOND=1 arquivo-mcp
-docker logs -f arquivo-mcp
-```
-
-### Observability
-
-- Logs are JSON on stderr; capture via `journalctl`, Docker logs, or any log collector.
-- Set `LOG_LEVEL=debug` for verbose request/error logs.
-- The server does not expose metrics endpoints; monitor via logs and process health.
-
-## Project Status
-
-- **v1.0.0** (planned) — All core tools implemented and tested
-- See [ROADMAP.md](docs/ROADMAP.md) for detailed milestones and backlog
+---
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE) file.
 
-## Acknowledgments
+---
 
-- [Arquivo.pt](https://arquivo.pt) — preserving Portuguese web since 1996
-- [Model Context Protocol](https://modelcontextprotocol.io) — standard for LLM tool integration
+## Credits
 
-# arquivo-mcp
+Built for the [Arquivo.pt](https://arquivo.pt) web archive. Uses the official MCP SDK.

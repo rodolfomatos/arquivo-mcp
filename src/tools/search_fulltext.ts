@@ -28,7 +28,7 @@ import type { SearchFulltextParams } from './types.js';
 export async function searchFulltextTool(
   client: ArquivoClient,
   params: SearchFulltextParams,
-): Promise<{ content: Array<{ text: string }> }> {
+): Promise<{ content: Array<{ type: string; text: string }> }> {
   // Validation
   if (!params.query || params.query.trim() === '') {
     throw new Error('Query parameter is required');
@@ -65,7 +65,13 @@ export async function searchFulltextTool(
     // Ensure output does not exceed 8000 tokens (RNF-02)
     const truncated = truncateToTokens(output, 8000);
 
-    return { content: [{ text: truncated }] };
+    // Debug: log return structure for troubleshooting -32602
+    logger.debug('search_fulltext returning', {
+      contentLength: truncated.length,
+      sample: truncated.substring(0, 100),
+    });
+
+    return { content: [{ type: 'text', text: truncated }] };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logger.error('search_fulltext error', { error: message, params });

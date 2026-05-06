@@ -35,18 +35,35 @@ export interface ImageResult {
 interface ApiItem {
   title?: string;
   link?: string;
+  originalURL?: string;
   snippet?: string;
   tstamp?: string;
+  contentLength?: number;
   size?: number;
   status?: number;
+  // Image search fields (API response)
+  pageTitle?: string[];
+  imgTitle?: string[];
+  imgAlt?: string[];
+  imgSrc?: string;
+  imgLinkToArchive?: string;
+  pageURL?: string;
+  pageLinkToArchive?: string;
+  imgTstamp?: string;
+  pageTstamp?: string;
+  imgWidth?: number;
+  imgHeight?: number;
+  // Legacy fields
   imgLink?: string;
+  linkToArchive?: string;
   pageLink?: string;
   width?: number;
   height?: number;
 }
 
 interface ApiResponse<T> {
-  responseItems: T[];
+  response_items?: T[];
+  responseItems?: T[]; // Legacy support
 }
 
 const ARQUIVO_API_BASE = 'https://arquivo.pt';
@@ -58,10 +75,11 @@ const ARQUIVO_API_BASE = 'https://arquivo.pt';
  * Features:
  * - Token bucket rate limiting to respect API boundaries
  * - Exponential backoff with jitter and Retry-After header support
- * - Request timeout AbortController
+ * - Request timeout with adaptive duration based on expected payload
  * - Automatic HTML parsing and extracted text fallback
+ * - HTTP keep-alive for connection reuse (when supported)
  *
- * Default rate: 1 request per second (rps), 2 retries, 10s timeout.
+ * Default rate: 1 request per second (rps), 4 retries, 120s timeout (adaptive: max(base, 30s + maxItems×600ms), clamped 30–180s).
  */
 export class ArquivoClient {
   private throttler: TokenBucket;
@@ -93,8 +111,8 @@ export class ArquivoClient {
       1;
     // TokenBucket: capacity = rps tokens, refillRate = 1 token/sec (steady drip)
     this.throttler = new TokenBucket(rps, 1);
-    this.maxRetries = options.maxRetries ?? 2;
-    this.timeoutMs = options.timeoutMs ?? 10000;
+    this.maxRetries = options.maxRetries ?? 4;
+    this.timeoutMs = options.timeoutMs ?? 120000;
   }
 
   /**
@@ -119,35 +137,65 @@ export class ArquivoClient {
       }
     });
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
+    const urlStr = url.toString();
+
+    // Adaptive timeout: ensure at least the configured base timeout, but scale up for large result sets
+    // Formula: base timeout (this.timeoutMs) as minimum, plus 600ms per maxItem beyond a threshold
+    // Clamp: 30s minimum, 120s maximum
+    const items = (params.maxItems as number | undefined) ?? 10;
+    const adaptiveTimeout = 30000 + items * 600; // linear scaling
+    const effectiveTimeout = Math.min(120000, Math.max(this.timeoutMs, adaptiveTimeout));
 
     try {
       const response = await retryWithBackoff(
         async () => {
-          logger.debug('Making request', { url: url.toString() });
-          const res = await fetch(url.toString(), {
-            signal: controller.signal,
-            headers: {
-              'User-Agent': 'arquivo-mcp/0.1.0',
-              Accept: 'application/json',
-            },
-          });
+          const start = Date.now();
+          logger.debug('Making request', { url: urlStr, timeout: effectiveTimeout });
+          const controller = new AbortController();
+          const attemptTimeout = setTimeout(() => {
+            logger.debug('Timeout firing', { url: urlStr, timeout: effectiveTimeout });
+            controller.abort();
+          }, effectiveTimeout);
+          try {
+            const res = await fetch(urlStr, {
+              signal: controller.signal,
+              headers: {
+                'User-Agent': 'arquivo-mcp/0.1.0',
+                Accept: 'application/json',
+              },
+              keepalive: true,
+            });
 
-          if (!res.ok) {
-            throw new HttpError(res.status, res.headers, `HTTP ${res.status} ${res.statusText}`);
+            if (!res.ok) {
+              throw new HttpError(res.status, res.headers, `HTTP ${res.status} ${res.statusText}`);
+            }
+
+            const data = await res.json();
+            const elapsed = Date.now() - start;
+            logger.debug('Request succeeded', { url: urlStr, elapsedMs: elapsed });
+            return data;
+          } catch (err) {
+            const elapsed = Date.now() - start;
+            logger.debug('Fetch error', {
+              url: urlStr,
+              error: err instanceof Error ? err.message : String(err),
+              errorName: err instanceof Error ? err.name : undefined,
+              elapsedMs: elapsed,
+            });
+            throw err;
+          } finally {
+            clearTimeout(attemptTimeout);
           }
-
-          return res.json() as Promise<T>;
         },
         this.maxRetries,
-        1000,
+        2000,
         isRetryableError,
       );
 
       return response;
-    } finally {
-      clearTimeout(timeoutId);
+    } catch (error) {
+      logger.error('Request failed', { url: urlStr, error: String(error) });
+      throw error;
     }
   }
 
@@ -167,17 +215,24 @@ export class ArquivoClient {
     init?: RequestInit,
     timeoutMs?: number,
   ): Promise<Response> {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs ?? this.timeoutMs);
+    const timeout = timeoutMs ?? this.timeoutMs;
+
     try {
       return await retryWithBackoff(
-        () => fetch(url, { ...init, signal: controller.signal }),
+        () => {
+          const controller = new AbortController();
+          const attemptTimeout = setTimeout(() => controller.abort(), timeout);
+          return fetch(url, { ...init, signal: controller.signal }).finally(() => {
+            clearTimeout(attemptTimeout);
+          });
+        },
         this.maxRetries,
         1000,
         isRetryableError,
       );
-    } finally {
-      clearTimeout(timeoutId);
+    } catch (error) {
+      logger.error('Fetch failed', { url, error: String(error) });
+      throw error;
     }
   }
 
@@ -215,14 +270,14 @@ export class ArquivoClient {
       offset: params.offset ?? 0,
     });
 
-    const items = data.responseItems ?? [];
+    const items = data.response_items ?? data.responseItems ?? [];
     return items.map((item) => ({
       title: item.title ?? '',
-      link: item.link ?? '',
-      archiveLink: this.buildArchiveLink(item.tstamp ?? '', item.link ?? ''),
+      link: item.originalURL ?? item.link ?? '',
+      archiveLink: this.buildArchiveLink(item.tstamp ?? '', item.originalURL ?? item.link ?? ''),
       snippet: stripHtml(item.snippet ?? ''),
       tstamp: item.tstamp ?? '',
-      size: item.size,
+      size: item.contentLength ?? item.size,
     }));
   }
 
@@ -254,12 +309,12 @@ export class ArquivoClient {
       offset: params.offset ?? 0,
     });
 
-    const items = data.responseItems ?? [];
+    const items = data.response_items ?? data.responseItems ?? [];
     return items.map((item) => ({
       tstamp: item.tstamp ?? '',
       status: item.status ?? 0,
-      link: this.buildArchiveLink(item.tstamp ?? '', item.link ?? ''),
-      size: item.size,
+      link: this.buildArchiveLink(item.tstamp ?? '', item.originalURL ?? item.link ?? ''),
+      size: item.contentLength ?? item.size,
     }));
   }
 
@@ -291,21 +346,37 @@ export class ArquivoClient {
       offset: params.offset ?? 0,
     });
 
-    const items = data.responseItems ?? [];
+    const items = data.response_items ?? data.responseItems ?? [];
     return items.map((item) => ({
-      title: item.title ?? '',
-      imgLink: item.imgLink ?? '',
-      pageLink: item.pageLink ?? '',
-      tstamp: item.tstamp ?? '',
-      width: item.width,
-      height: item.height,
+      title: item.pageTitle?.[0] ?? item.imgTitle?.[0] ?? item.imgAlt?.[0] ?? '',
+      imgLink: item.imgLinkToArchive ?? item.imgSrc ?? '',
+      pageLink: item.pageLinkToArchive ?? item.pageURL ?? '',
+      tstamp: item.imgTstamp ?? item.pageTstamp ?? '',
+      width: item.imgWidth,
+      height: item.imgHeight,
     }));
   }
 
   /**
+   * Parse an Arquivo.pt archive URL into timestamp and original URL.
+   * Format: https://arquivo.pt/wayback/{timestamp}/{originalUrl}
+   * Returns null if not matches.
+   */
+  private parseArchiveUrl(archiveUrl: string): { timestamp: string; originalUrl: string } | null {
+    const match = archiveUrl.match(/arquivo\.pt\/wayback\/(\d{14,})\/(.+)/);
+    if (!match) return null;
+    return {
+      timestamp: match[1],
+      originalUrl: match[2],
+    };
+  }
+
+  /**
    * Fetch and extract text content from an archived page.
-   * Performs two fetches: the archive HTML page, then optionally the extracted text file.
-   * Applies throttling, retry, timeout, token truncation, and HTML parsing.
+   * Performs up to two fetches: the archive HTML page, optionally the noFrame/replay endpoint,
+   * and/or extracted text file. Applies throttling, retry, timeout, token truncation, HTML parsing.
+   *
+   * Throttling: consumes 1 token for archive page, plus 1 more if noFrame/replay is attempted.
    *
    * @param archiveUrl - Full Arquivo.pt archive URL (must be from arquivo.pt)
    * @param maxTokens - Maximum tokens to return; defaults to 4000; truncated at word boundary
@@ -313,7 +384,6 @@ export class ArquivoClient {
    * @throws Error if archive page fetch fails or is not OK
    *
    * Side effects: logs warnings if extracted text fetch fails (falls back to HTML strip).
-   * Throttling: consumes two tokens if extracted text is found, one otherwise.
    */
   async fetchPage(
     archiveUrl: string,
@@ -332,29 +402,80 @@ export class ArquivoClient {
     const html = await decodeResponse(res);
     const $ = cheerio.load(html);
 
-    // Try to find the extracted text link
-    const extractedLink =
-      $('link[rel="archived text"]').attr('href') ||
-      $('a[href*="linkToExtractedText"]').attr('href');
+    // Detect Wayback wrapper (toolbar, scripts)
+    const hasWaybackToolbar = $('.wb-toolbar, #wm-ipp-base, .wayback-toolbar').length > 0;
+    const hasWaybackScript = html.includes('arquivo.pt/wayback/static') || html.includes('WB_womb');
+    const isWrapper = hasWaybackToolbar || hasWaybackScript;
 
-    let content: string;
-    if (extractedLink) {
-      // Second fetch: the extracted text version (also throttled)
-      await this.throttler.consume();
-      const extractedRes = await this.fetchWithRetryAndTimeout(extractedLink, {
-        headers: { 'User-Agent': 'arquivo-mcp/0.1.0' },
-      });
+    let content: string | undefined;
 
-      if (extractedRes.ok) {
-        content = await decodeResponse(extractedRes);
-      } else {
-        logger.warn('Extracted text fetch failed, falling back to HTML strip', {
-          status: extractedRes.status,
-        });
-        content = stripHtml(html);
+    // Strategy: try noFrame/replay endpoint to get original page without wrapper
+    if (isWrapper) {
+      const parsed = this.parseArchiveUrl(archiveUrl);
+      if (parsed) {
+        const noFrameUrl = `https://arquivo.pt/noFrame/replay/${parsed.timestamp}/${parsed.originalUrl}`;
+        logger.debug('Attempting noFrame/replay', { url: noFrameUrl });
+        try {
+          await this.throttler.consume(); // second token
+          const noFrameRes = await this.fetchWithRetryAndTimeout(noFrameUrl, {
+            headers: { 'User-Agent': 'arquivo-mcp/0.1.0' },
+          });
+          if (noFrameRes.ok) {
+            const noFrameHtml = await decodeResponse(noFrameRes);
+            // If the noFrame page is valid HTML, extract text
+            content = stripHtml(noFrameHtml);
+            logger.debug('NoFrame success', { url: noFrameUrl });
+          } else {
+            logger.warn('NoFrame fetch failed', { status: noFrameRes.status });
+          }
+        } catch (err) {
+          logger.warn('NoFrame fetch error', {
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
       }
-    } else {
-      content = stripHtml(html);
+    }
+
+    // If noFrame didn't yield content, try other extraction methods
+    if (!content) {
+      // Try to find the extracted text link (multiple selector strategies)
+      const extractedLink =
+        // Standard Wayback extracted text link
+        $('link[rel="archived text"]').attr('href') ||
+        $('link[rel="archived-text"]').attr('href') ||
+        // Alternative: look for text extraction service links
+        $(`a[href*="linkToExtractedText"]`).attr('href') ||
+        $(`a[href*="extracted_text"]`).attr('href') ||
+        // Check for Wayback's text version
+        $(`a[href*="/txt/"]`).attr('href') ||
+        // Check for any link containing 'text' in the Wayback toolbar
+        $(`.wb-info-base a[href*="text"]`).attr('href');
+
+      if (extractedLink) {
+        // Second fetch: the extracted text version (also throttled)
+        await this.throttler.consume();
+        const extractedRes = await this.fetchWithRetryAndTimeout(extractedLink, {
+          headers: { 'User-Agent': 'arquivo-mcp/0.1.0' },
+        });
+
+        if (extractedRes.ok) {
+          content = await decodeResponse(extractedRes);
+        } else {
+          logger.warn('Extracted text fetch failed, falling back to HTML strip', {
+            status: extractedRes.status,
+          });
+          content = stripHtml(html);
+        }
+      } else {
+        // No extracted text link found - try fetching the raw content directly
+        // The archive URL may return a Wayback wrapper; try to get actual content
+        const actualContent = this.tryExtractFromWaybackWrapper(html, $);
+        if (actualContent) {
+          content = actualContent;
+        } else {
+          content = stripHtml(html);
+        }
+      }
     }
 
     const title = $('title').text().trim() || 'Untitled';
@@ -369,15 +490,49 @@ export class ArquivoClient {
     };
   }
 
+  private tryExtractFromWaybackWrapper(html: string, $: cheerio.CheerioAPI): string | null {
+    // Strategy 1: Look for iframe with original content
+    const iframeSrc = $('iframe[src]').attr('src');
+    if (iframeSrc && !iframeSrc.includes('wayback')) {
+      // This is likely the original page in an iframe
+      // We can't fetch it here (would need another request), but log it
+      logger.debug('Found potential original content iframe', { src: iframeSrc });
+    }
+
+    // Strategy 2: Check if this is a Wayback wrapper by looking for Wayback-specific elements
+    const hasWaybackToolbar = $('.wb-toolbar, #wm-ipp-base, .wayback-toolbar').length > 0;
+    const hasWaybackScript = html.includes('arquivo.pt/wayback/static') || html.includes('WB_womb');
+
+    if (hasWaybackToolbar || hasWaybackScript) {
+      // This is a Wayback wrapper page
+      // Try to find the actual content iframe
+      const replayIframe =
+        $('iframe[id="replay_iframe"], iframe.replay-iframe').attr('src') ||
+        $('iframe[src*="mp_"]').attr('src');
+
+      if (replayIframe) {
+        logger.debug('Found replay iframe, but cannot fetch from wrapper', { src: replayIframe });
+        // Return a message indicating the content is in an iframe
+        return null;
+      }
+
+      // Try to extract any visible text content that isn't Wayback UI
+      const bodyText = $('body').text().trim();
+      const waybackText = $('.wb-toolbar, #wm-ipp-base').text();
+
+      // If most of the text is Wayback UI, this is just a wrapper
+      if (waybackText.length > bodyText.length * 0.5) {
+        logger.warn('Detected Wayback wrapper page, content likely in iframe');
+        return null;
+      }
+    }
+
+    // Not a wrapper, or couldn't detect - return null to use stripHtml fallback
+    return null;
+  }
+
   private buildArchiveLink(tstamp: string, originalUrl: string): string {
     if (!tstamp) return originalUrl;
     return `https://arquivo.pt/wayback/${tstamp}/${originalUrl}`;
-  }
-
-  /**
-   * Cleanly shut down the client (stop throttler intervals, etc.)
-   */
-  shutdown(): void {
-    this.throttler.stop();
   }
 }

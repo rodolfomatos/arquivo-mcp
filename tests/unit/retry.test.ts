@@ -43,4 +43,9 @@ describe('isRetryableError', () => {
     const err = { code: 'ECONNABORTED' };
     expect(isRetryableError(err)).toBe(true);
   });
+
+  it('should return false for AbortError', () => {
+    const err = new DOMException('The operation was aborted.', 'AbortError');
+    expect(isRetryableError(err)).toBe(false);
+  });
 });

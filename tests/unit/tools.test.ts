@@ -3,7 +3,7 @@ import { searchFulltextTool, getUrlVersionsTool } from 'src/tools/index';
 import type { ArquivoClient } from 'src/client/ArquivoClient';
 
 describe('searchFulltextTool', () => {
-  let mockClient: any;
+  let mockClient: Pick<ArquivoClient, 'searchFulltext'>;
 
   beforeEach(() => {
     mockClient = {
@@ -12,13 +12,13 @@ describe('searchFulltextTool', () => {
   });
 
   it('should throw if query is missing', async () => {
-    await expect(searchFulltextTool(mockClient, {} as any)).rejects.toThrow(
-      'Query parameter is required',
-    );
+    await expect(
+      searchFulltextTool(mockClient as ArquivoClient, { query: undefined as unknown as string }),
+    ).rejects.toThrow('Query parameter is required');
   });
 
   it('should throw if query is empty', async () => {
-    await expect(searchFulltextTool(mockClient, { query: '   ' })).rejects.toThrow(
+    await expect(searchFulltextTool(mockClient as ArquivoClient, { query: '   ' })).rejects.toThrow(
       'Query parameter is required',
     );
   });
@@ -26,12 +26,12 @@ describe('searchFulltextTool', () => {
   it('should clamp maxItems between 1 and 50', async () => {
     mockClient.searchFulltext = vi.fn().mockResolvedValue([]);
 
-    await searchFulltextTool(mockClient, { query: 'test', maxItems: 100 });
+    await searchFulltextTool(mockClient as ArquivoClient, { query: 'test', maxItems: 100 });
     expect(mockClient.searchFulltext).toHaveBeenCalledWith(
       expect.objectContaining({ maxItems: 50 }),
     );
 
-    await searchFulltextTool(mockClient, { query: 'test', maxItems: 0 });
+    await searchFulltextTool(mockClient as ArquivoClient, { query: 'test', maxItems: 0 });
     expect(mockClient.searchFulltext).toHaveBeenCalledWith(
       expect.objectContaining({ maxItems: 1 }),
     );
@@ -48,7 +48,7 @@ describe('searchFulltextTool', () => {
       },
     ]);
 
-    const result = await searchFulltextTool(mockClient, { query: 'test' });
+    const result = await searchFulltextTool(mockClient as ArquivoClient, { query: 'test' });
 
     expect(result.content).toHaveLength(1);
     expect(result.content[0].text).toContain('[1 resultados para "test"]');
@@ -60,14 +60,14 @@ describe('searchFulltextTool', () => {
   it('should propagate errors with friendly message', async () => {
     mockClient.searchFulltext = vi.fn().mockRejectedValue(new Error('Network error'));
 
-    await expect(searchFulltextTool(mockClient, { query: 'test' })).rejects.toThrow(
-      'Search failed: Network error',
-    );
+    await expect(
+      searchFulltextTool(mockClient as ArquivoClient, { query: 'test' }),
+    ).rejects.toThrow('Search failed: Network error');
   });
 });
 
 describe('getUrlVersionsTool', () => {
-  let mockClient: any;
+  let mockClient: Pick<ArquivoClient, 'getUrlVersions'>;
 
   beforeEach(() => {
     mockClient = {
@@ -76,13 +76,13 @@ describe('getUrlVersionsTool', () => {
   });
 
   it('should throw if url is missing', async () => {
-    await expect(getUrlVersionsTool(mockClient, {} as any)).rejects.toThrow(
-      'URL parameter is required',
-    );
+    await expect(
+      getUrlVersionsTool(mockClient as ArquivoClient, { url: undefined as unknown as string }),
+    ).rejects.toThrow('URL parameter is required');
   });
 
   it('should throw if url is empty', async () => {
-    await expect(getUrlVersionsTool(mockClient, { url: '' } as any)).rejects.toThrow(
+    await expect(getUrlVersionsTool(mockClient as ArquivoClient, { url: '' })).rejects.toThrow(
       'URL parameter is required',
     );
   });
@@ -90,12 +90,18 @@ describe('getUrlVersionsTool', () => {
   it('should clamp maxItems between 1 and 100', async () => {
     mockClient.getUrlVersions = vi.fn().mockResolvedValue([]);
 
-    await getUrlVersionsTool(mockClient, { url: 'http://test.com', maxItems: 200 });
+    await getUrlVersionsTool(mockClient as ArquivoClient, {
+      url: 'http://test.com',
+      maxItems: 200,
+    });
     expect(mockClient.getUrlVersions).toHaveBeenCalledWith(
       expect.objectContaining({ maxItems: 100 }),
     );
 
-    await getUrlVersionsTool(mockClient, { url: 'http://test.com', maxItems: 0 });
+    await getUrlVersionsTool(mockClient as ArquivoClient, {
+      url: 'http://test.com',
+      maxItems: 0,
+    });
     expect(mockClient.getUrlVersions).toHaveBeenCalledWith(
       expect.objectContaining({ maxItems: 1 }),
     );
@@ -111,7 +117,9 @@ describe('getUrlVersionsTool', () => {
       },
     ]);
 
-    const result = await getUrlVersionsTool(mockClient, { url: 'http://test.com' });
+    const result = await getUrlVersionsTool(mockClient as ArquivoClient, {
+      url: 'http://test.com',
+    });
 
     expect(result.content).toHaveLength(1);
     expect(result.content[0].text).toContain('[1 versões arquivadas de http://test.com]');

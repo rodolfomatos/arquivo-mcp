@@ -1,5 +1,5 @@
 /**
- * Token bucket rate limiter.
+ * Token bucket rate limiter using event-driven waiting (no busy-wait polling).
  * Allows up to `capacity` tokens, refilled at `refillRate` tokens per second.
  *
  * Usage: call consume() before each API request to wait for a token.
@@ -11,6 +11,7 @@ export class TokenBucket {
   private capacity: number;
   private refillRate: number;
   private intervalId: NodeJS.Timeout | null = null;
+  private waiting: (() => void)[] = [];
 
   /**
    * Initialize token bucket with capacity and refill rate.
@@ -29,30 +30,36 @@ export class TokenBucket {
   }
 
   private startRefillTimer(): void {
-    // Refill tokens gradually every 100ms
     this.intervalId = setInterval(() => {
       const now = Date.now();
-      const elapsed = (now - this.lastRefill) / 1000; // seconds
+      const elapsed = (now - this.lastRefill) / 1000;
       const tokensToAdd = elapsed * this.refillRate;
       this.tokens = Math.min(this.capacity, this.tokens + tokensToAdd);
       this.lastRefill = now;
+
+      // Resolve waiting consumers if tokens are available
+      while (this.tokens >= 1 && this.waiting.length > 0) {
+        this.tokens -= 1;
+        this.waiting.shift()?.();
+      }
     }, 100);
   }
 
   /**
-   * Consume one token, blocking until available if bucket is empty.
-   *
-   * Algorithm: busy-wait loop with 50ms sleeps until tokens >= 1, then decrement.
-   * This ensures rate-limited concurrency without external dependencies.
+   * Consume one token. Resolves immediately if available, otherwise waits
+   * until the refill interval grants a token.
    *
    * Side effects: Decrements internal token count.
    * @throws Never throws; waits indefinitely until token available.
    */
   async consume(): Promise<void> {
-    while (this.tokens < 1) {
-      await new Promise((resolve) => setTimeout(resolve, 50));
+    if (this.tokens >= 1) {
+      this.tokens -= 1;
+      return;
     }
-    this.tokens -= 1;
+    return new Promise((resolve) => {
+      this.waiting.push(resolve);
+    });
   }
 
   /**

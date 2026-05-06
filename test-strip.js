@@ -1,10 +1,8 @@
-import * as cheerio from 'cheerio';
+import { readFile } from 'fs/promises';
+import { join } from 'path';
 
-/**
- * Decode HTML entities in a string (no cheerio needed).
- * Handles numeric entities (&#123;, &#xABC;) and common named entities.
- */
-function decodeHtmlEntities(text: string): string {
+// Inline stripHtml for testing (copied from src/utils/html.ts)
+function decodeHtmlEntities(text) {
   return text
     .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(parseInt(dec, 10)))
     .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
@@ -100,23 +98,18 @@ function decodeHtmlEntities(text: string): string {
     .replace(/&rlm;/g, '');
 }
 
-/**
- * Strip HTML tags and return plain text.
- * Uses cheerio for parsing, removes non-content elements, and decodes entities.
- *
- * @param html - Input HTML string
- * @returns Plain text content (trimmed, collapsed whitespace)
- */
-export function stripHtml(html: string): string {
+function stripHtml(html) {
   if (html.length < 2048) {
     return decodeHtmlEntities(html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ')).trim();
   }
-  const $ = cheerio.load(html);
-  // Remove elements that are not part of the visible content
-  $('script, style, noscript, iframe, head, meta, link, title').remove();
-  // Get text content
-  let text = $.text();
-  // Collapse whitespace and trim
-  text = text.replace(/\s+/g, ' ').trim();
-  return decodeHtmlEntities(text);
+  // Use cheerio for larger HTML - but we don't have it in this simple test
+  // We'll just do regex fallback
+  return decodeHtmlEntities(html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ')).trim();
 }
+
+const html = await readFile(join(process.cwd(), 'noframe-publico.html'), 'utf-8');
+console.log('HTML size:', html.length);
+
+const text = stripHtml(html);
+console.log('Text size:', text.length);
+console.log('First 2000 chars:\n', text.substring(0, 2000));

@@ -3,7 +3,7 @@ import { getPageContentTool } from 'src/tools/get_page_content';
 import type { ArquivoClient } from 'src/client/ArquivoClient';
 
 describe('getPageContentTool', () => {
-  let mockClient: any;
+  let mockClient: Pick<ArquivoClient, 'fetchPage'>;
 
   beforeEach(() => {
     mockClient = {
@@ -12,20 +12,24 @@ describe('getPageContentTool', () => {
   });
 
   it('should throw if archive_url is missing', async () => {
-    await expect(getPageContentTool(mockClient, {} as any)).rejects.toThrow(
-      'Archive URL parameter is required',
-    );
+    await expect(
+      getPageContentTool(mockClient as ArquivoClient, {
+        archive_url: undefined as unknown as string,
+      }),
+    ).rejects.toThrow('Archive URL parameter is required');
   });
 
   it('should throw if archive_url is empty', async () => {
-    await expect(getPageContentTool(mockClient, { archive_url: '' } as any)).rejects.toThrow(
-      'Archive URL parameter is required',
-    );
+    await expect(
+      getPageContentTool(mockClient as ArquivoClient, { archive_url: '' }),
+    ).rejects.toThrow('Archive URL parameter is required');
   });
 
   it('should reject URLs not from arquivo.pt', async () => {
     await expect(
-      getPageContentTool(mockClient, { archive_url: 'http://example.com/page' } as any),
+      getPageContentTool(mockClient as ArquivoClient, {
+        archive_url: 'http://example.com/page',
+      }),
     ).rejects.toThrow('Archive URL must be from arquivo.pt domain');
   });
 
@@ -37,7 +41,7 @@ describe('getPageContentTool', () => {
     });
 
     // Should not throw
-    await getPageContentTool(mockClient, {
+    await getPageContentTool(mockClient as ArquivoClient, {
       archive_url: 'https://arquivo.pt/wayback/20200101/http://example.com/page',
     });
   });
@@ -49,7 +53,7 @@ describe('getPageContentTool', () => {
       originalLength: 1000,
     });
 
-    await getPageContentTool(mockClient, {
+    await getPageContentTool(mockClient as ArquivoClient, {
       archive_url: 'https://arquivo.pt/wayback/20200101/http://url.com',
       max_tokens: 20000,
     });
@@ -58,7 +62,7 @@ describe('getPageContentTool', () => {
       16000,
     );
 
-    await getPageContentTool(mockClient, {
+    await getPageContentTool(mockClient as ArquivoClient, {
       archive_url: 'https://arquivo.pt/wayback/20200101/http://url.com',
       max_tokens: 10,
     });
@@ -76,7 +80,7 @@ describe('getPageContentTool', () => {
       originalLength: fullContent.length,
     });
 
-    const result = await getPageContentTool(mockClient, {
+    const result = await getPageContentTool(mockClient as ArquivoClient, {
       archive_url: 'https://arquivo.pt/wayback/20200101/http://test.com/page',
     });
 
@@ -97,7 +101,7 @@ describe('getPageContentTool', () => {
       originalLength: 50000,
     });
 
-    const result = await getPageContentTool(mockClient, {
+    const result = await getPageContentTool(mockClient as ArquivoClient, {
       archive_url: 'https://arquivo.pt/wayback/20200101/http://test.com/long',
     });
 
@@ -110,7 +114,7 @@ describe('getPageContentTool', () => {
     mockClient.fetchPage = vi.fn().mockRejectedValue(new Error('Timeout'));
 
     await expect(
-      getPageContentTool(mockClient, {
+      getPageContentTool(mockClient as ArquivoClient, {
         archive_url: 'https://arquivo.pt/wayback/20200101/http://test.com',
       }),
     ).rejects.toThrow('Failed to fetch page content: Timeout');

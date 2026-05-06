@@ -71,6 +71,11 @@ export class Logger {
   error(message: string, meta?: Record<string, unknown>) {
     this.log('error', message, meta);
   }
+
+  /** Change the minimum log level at runtime. */
+  setLevel(level: LogLevel) {
+    this.minLevel = level;
+  }
 }
 
 // Global logger instance (configurable via LOG_LEVEL env var)

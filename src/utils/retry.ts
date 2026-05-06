@@ -36,7 +36,6 @@ export async function retryWithBackoff<T>(
         throw error;
       }
 
-      // Calculate delay with optional Retry-After and jitter
       let delay: number;
       if (error instanceof HttpError) {
         const retryAfter = error.getRetryAfter();
@@ -44,12 +43,12 @@ export async function retryWithBackoff<T>(
           delay = retryAfter;
         } else {
           delay = baseDelayMs * Math.pow(2, attempt);
-          const jitter = 0.8 + Math.random() * 0.4; // ±20%
+          const jitter = 0.8 + Math.random() * 0.4;
           delay *= jitter;
         }
       } else {
         delay = baseDelayMs * Math.pow(2, attempt);
-        const jitter = 0.8 + Math.random() * 0.4; // ±20%
+        const jitter = 0.8 + Math.random() * 0.4;
         delay *= jitter;
       }
 
@@ -66,13 +65,12 @@ export async function retryWithBackoff<T>(
  * Retryable conditions:
  *   - HttpError with status 429 (rate limit) or 5xx (server errors)
  *   - Legacy shape: error.response.status 429/5xx (for older code)
- *   - Network errors: ECONNABORTED (timeout), ENETUNREACH (network unreachable)
+ *   - Network error codes: ECONNABORTED, ENETUNREACH, ERR_INTERNET_DISCONNECTED, ERR_NETWORK
  *   - AbortError from AbortController (Node.js fetch timeout)
+ *   - TypeError from fetch with network-related message (e.g., "Failed to fetch")
  *
  * @param error - Unknown error object from fetch or previous retry
  * @returns true if the operation should be retried
- *
- * Note: Does not log; used by retryWithBackoff only.
  */
 export function isRetryableError(error: unknown): boolean {
   // HttpError (preferred)
@@ -88,14 +86,25 @@ export function isRetryableError(error: unknown): boolean {
       return status === 429 || (status >= 500 && status < 600);
     }
   }
-  // Network errors, timeouts — also retryable
+  // Network errors with specific codes
   if (typeof error === 'object' && error !== null && 'code' in error) {
     const typedError = error as { code?: string };
-    return typedError.code === 'ECONNABORTED' || typedError.code === 'ENETUNREACH';
+    const code = typedError.code;
+    return (
+      code === 'ECONNABORTED' ||
+      code === 'ENETUNREACH' ||
+      code === 'ERR_INTERNET_DISCONNECTED' ||
+      code === 'ERR_NETWORK'
+    );
   }
-  // AbortError from AbortController (Node.js fetch)
+  // AbortError from AbortController (Node.js fetch timeout)
   if (error instanceof Error && error.name === 'AbortError') {
     return true;
+  }
+  // TypeError from fetch (typically network errors like "Failed to fetch")
+  if (error instanceof Error && error.name === 'TypeError') {
+    const msg = error.message.toLowerCase();
+    return msg.includes('fetch') || msg.includes('failed') || msg.includes('network');
   }
   return false;
 }

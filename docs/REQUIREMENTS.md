@@ -3,6 +3,7 @@
 ## Requisitos Funcionais
 
 ### RF-01 — Tool: search_fulltext
+
 **Descrição:** Pesquisa full-text no arquivo da web portuguesa.
 
 **Parâmetros de input (expostos ao LLM):**
@@ -17,11 +18,13 @@
 | `offset` | number | ❌ | Paginação. Default: 0 |
 
 **Mapeamento para API Arquivo.pt:**
+
 - `query` → `q`
 - `site` → `siteSearch`
 - Restantes parâmetros mapeiam directamente
 
 **Output ao LLM (texto limpo, não JSON):**
+
 ```
 [N resultados para "query" entre FROM e TO]
 
@@ -36,12 +39,14 @@
 ```
 
 **Limites internos:**
+
 - `maxItems` limitado a 50 pelo MCP (mesmo que a API permita 500)
 - Snippet com HTML stripped antes de enviar ao LLM
 
 ---
 
 ### RF-02 — Tool: get_url_versions
+
 **Descrição:** Lista todas as versões arquivadas de um URL específico.
 
 **Parâmetros de input:**
@@ -53,10 +58,12 @@
 | `to` | string | ❌ | Filtro de data final |
 
 **Mapeamento para API Arquivo.pt:**
+
 - Usa `versionHistory` parameter do endpoint `/textsearch`
 - URL deve ser percent-encoded internamente pelo servidor
 
 **Output ao LLM:**
+
 ```
 [N versões arquivadas de URL]
 
@@ -70,6 +77,7 @@
 ---
 
 ### RF-03 — Tool: get_page_content
+
 **Descrição:** Recupera o conteúdo textual de uma versão específica arquivada.
 
 **Parâmetros de input:**
@@ -79,11 +87,13 @@
 | `max_tokens` | number | ❌ | Limite de tokens do output. Default: 4000 |
 
 **Implementação:**
+
 1. Usar `linkToExtractedText` se disponível (texto já extraído pelo Arquivo.pt)
 2. Fallback: fetch de `linkToNoFrame` + strip HTML
 3. Truncar ao `max_tokens` com indicação de truncação
 
 **Output ao LLM:**
+
 ```
 [Conteúdo de: URL — DATA]
 
@@ -100,6 +110,7 @@ TEXTO:
 ---
 
 ### RF-04 — Tool: search_images
+
 **Descrição:** Pesquisa imagens históricas no arquivo da web portuguesa.
 
 **Parâmetros de input:**
@@ -113,6 +124,7 @@ TEXTO:
 **Endpoint:** `https://arquivo.pt/imagesearch` (Image Search API v1.1)
 
 **Output ao LLM:**
+
 ```
 [N imagens para "query"]
 
@@ -130,39 +142,46 @@ TEXTO:
 ## Requisitos Não-Funcionais
 
 ### RNF-01 — Rate Limiting
+
 - O servidor MCP **deve** impor throttling interno de no máximo 1 request/segundo à API do Arquivo.pt
 - Implementar token bucket ou similar
 - Em caso de HTTP 429, esperar e retentar (máx. 2 retentativas com backoff exponencial)
 - **Nunca** deixar o LLM fazer chamadas paralelas à API
 
 ### RNF-02 — Tamanho do Output
+
 - Nenhuma tool deve retornar mais de 8000 tokens ao LLM por defeito
 - `get_page_content` deve truncar com indicação clara
 - Snippets devem ter HTML stripped (incluindo `&amp;`, `&eacute;`, etc.)
 
 ### RNF-03 — Compatibilidade MCP
+
 - Implementar MCP SDK v1.x (TypeScript: `@modelcontextprotocol/sdk`)
 - Compatível com: Claude Desktop, Cursor, Claude Code
 - Transport: stdio (padrão para uso local)
 - Opcional: SSE transport para uso remoto
 
 ### RNF-04 — Latência
+
 - `search_fulltext`: < 2s p95
 - `get_url_versions`: < 2s p95
 - `search_images`: < 2s p95
 - `get_page_content`: < 10s p95 (fetch remoto)
 
 ### RNF-05 — Resiliência
+
 - Timeout de 10s em todos os requests HTTP
 - Mensagem de erro descritiva ao LLM em caso de falha (não stack trace)
 - Falha de uma tool não deve crashar o servidor
 
 ### RNF-06 — Instalação
+
 - `npx arquivo-mcp` deve funcionar sem instalação prévia
 - Configuração via `claude_desktop_config.json` documentada no README
 - Sem dependências de sistema operativo (Windows, macOS, Linux)
 
 ### RNF-07 — Logging
+
 - Logs estruturados para stderr (não stdout — stdout é reservado para MCP)
 - Nível de log configurável via variável de ambiente `LOG_LEVEL`
 - Incluir: timestamp, tool chamada, URL da API, latência, status
@@ -171,12 +190,12 @@ TEXTO:
 
 ## Restrições e Dependências Externas
 
-| Dependência | Detalhe | Risco |
-|---|---|---|
-| Arquivo.pt API | Pública, sem autenticação | Rate limit: 250 req/180s. IP banido se exceder |
-| `linkToExtractedText` | Pode retornar vazio | Fallback para HTML scraping necessário |
-| Encoding histórico | Páginas antigas em windows-1252 | Deve forçar UTF-8 na conversão |
-| HTML qualidade | Páginas dos anos 90 têm HTML inválido | Parser tolerante (cheerio, não DOM nativo) |
+| Dependência           | Detalhe                               | Risco                                          |
+| --------------------- | ------------------------------------- | ---------------------------------------------- |
+| Arquivo.pt API        | Pública, sem autenticação             | Rate limit: 250 req/180s. IP banido se exceder |
+| `linkToExtractedText` | Pode retornar vazio                   | Fallback para HTML scraping necessário         |
+| Encoding histórico    | Páginas antigas em windows-1252       | Deve forçar UTF-8 na conversão                 |
+| HTML qualidade        | Páginas dos anos 90 têm HTML inválido | Parser tolerante (cheerio, não DOM nativo)     |
 
 ---
 

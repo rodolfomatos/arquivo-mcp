@@ -3,9 +3,9 @@ import { ArquivoClient } from 'src/client/ArquivoClient';
 
 // Mock fetch globally
 const mockFetch = vi.fn();
-global.fetch = mockFetch as any;
+global.fetch = mockFetch as unknown as typeof fetch;
 
-function createMockResponse(data: any, status = 200): any {
+function createMockResponse(data: string | Record<string, unknown>, status = 200) {
   const buffer = new TextEncoder().encode(
     typeof data === 'string' ? data : JSON.stringify(data),
   ).buffer;

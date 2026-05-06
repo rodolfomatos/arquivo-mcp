@@ -14,6 +14,29 @@ import type { GetUrlVersionsParams } from './tools/types.js';
 import type { GetPageContentParams } from './tools/types.js';
 import type { SearchImagesParams } from './tools/types.js';
 import { logger } from './utils/logger.js';
+import { startHttpServer } from './server/http-server.js';
+
+function parseArgs(): { mode: 'stdio' | 'http'; port?: number } {
+  const args = process.argv.slice(2);
+  let mode: 'stdio' | 'http' = 'stdio';
+  let port: number | undefined;
+
+  for (const arg of args) {
+    if (arg === '--http' || arg === '-h') {
+      mode = 'http';
+    } else if (arg.startsWith('--port=')) {
+      const p = parseInt(arg.split('=')[1], 10);
+      if (!isNaN(p)) {
+        port = p;
+      }
+    }
+  }
+
+  if (mode === 'http') {
+    return { mode, port };
+  }
+  return { mode };
+}
 
 /**
  * Main entry point: start the MCP server with Arquivo tools.
@@ -29,6 +52,15 @@ import { logger } from './utils/logger.js';
  * @returns Never returns; runs until process termination
  */
 async function main() {
+  const { mode, port } = parseArgs();
+
+  if (mode === 'http') {
+    const envPort = Number(process.env.HTTP_PORT);
+    const httpPort = port ?? (isNaN(envPort) ? 3000 : envPort);
+    await startHttpServer(httpPort);
+    return;
+  }
+
   const server = new Server(
     {
       name: 'arquivo-mcp',
@@ -42,9 +74,14 @@ async function main() {
   );
 
   const client = new ArquivoClient({
-    maxRequestsPerSecond: 1,
-    maxRetries: 2,
-    timeoutMs: 10000,
+    maxRequestsPerSecond:
+      typeof process.env.MAX_REQUESTS_PER_SECOND === 'string'
+        ? parseInt(process.env.MAX_REQUESTS_PER_SECOND, 10)
+        : 1,
+    maxRetries:
+      typeof process.env.MAX_RETRIES === 'string' ? parseInt(process.env.MAX_RETRIES, 10) : 4,
+    timeoutMs:
+      typeof process.env.TIMEOUT_MS === 'string' ? parseInt(process.env.TIMEOUT_MS, 10) : 120000,
   });
 
   const tools: Tool[] = [
@@ -187,21 +224,25 @@ async function main() {
     try {
       if (name === 'search_fulltext') {
         const result = await searchFulltextTool(client, args as unknown as SearchFulltextParams);
+        logger.debug('Tool response structure', { name, resultContent: result.content });
         return { content: result.content };
       }
 
       if (name === 'get_url_versions') {
         const result = await getUrlVersionsTool(client, args as unknown as GetUrlVersionsParams);
+        logger.debug('Tool response structure', { name, resultContent: result.content });
         return { content: result.content };
       }
 
       if (name === 'get_page_content') {
         const result = await getPageContentTool(client, args as unknown as GetPageContentParams);
+        logger.debug('Tool response structure', { name, resultContent: result.content });
         return { content: result.content };
       }
 
       if (name === 'search_images') {
         const result = await searchImagesTool(client, args as unknown as SearchImagesParams);
+        logger.debug('Tool response structure', { name, resultContent: result.content });
         return { content: result.content };
       }
 
@@ -212,6 +253,7 @@ async function main() {
       return {
         content: [
           {
+            type: 'text',
             text: `Error: ${message}`,
           },
         ],
@@ -228,7 +270,7 @@ async function main() {
   // Graceful shutdown handling
   const shutdown = async (signal: string) => {
     logger.info(`Received ${signal}, shutting down gracefully...`);
-    client.shutdown();
+    // No special cleanup needed for ArquivoClient (no persistent connections)
     process.exit(0);
   };
 

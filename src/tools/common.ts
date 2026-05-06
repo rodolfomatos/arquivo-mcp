@@ -3,43 +3,21 @@
  */
 
 /**
- * Maximum output tokens (RNF-02): 8000 tokens ≈ 32000 chars.
- * Rationale: Prevent oversized responses that exceed LLM context windows
- * or cause slow streaming. Chosen to fit typical 8k–16k token limits.
- */
-const MAX_TOKENS = 8000;
-const MAX_CHARS = MAX_TOKENS * 4; // ~32000 chars (1 token ≈ 4 chars)
-
-/**
- * Truncate output string to MAX_CHARS, cutting at last newline to avoid partial lines.
- *
- * @param output - Full formatted output string
- * @returns Truncated string with '[Output truncated due to token limit]' suffix if cut
- */
-function truncateOutput(output: string): string {
-  if (output.length <= MAX_CHARS) {
-    return output;
-  }
-  const truncated = output.slice(0, MAX_CHARS);
-  // Find last newline to avoid cutting in middle of line
-  const lastNewline = truncated.lastIndexOf('\n');
-  const cutPoint = lastNewline > 0 ? lastNewline : MAX_CHARS;
-  return output.slice(0, cutPoint) + '\n\n[Output truncated due to token limit]';
-}
-
-/**
- * Format a YYYYMMDD... timestamp into YYYY-MM-DD (8 digits).
- * Partial timestamps are returned as-is without formatting.
+ * Format a YYYYMMDD... timestamp into a human-readable date.
+ * Handles partial timestamps gracefully:
+ *   4 digits (YYYY)    → "2023"
+ *   6 digits (YYYYMM)  → "2023-01"
+ *   8+ digits          → "2023-01-15"
  *
  * @param tstamp - Raw timestamp from API (e.g., '20230115120000')
- * @returns Formatted date string (e.g., '2023-01-15') or raw prefix if shorter
+ * @returns Formatted date string
  */
 function formatDate(tstamp: string): string {
-  const raw = tstamp.slice(0, 8); // YYYYMMDD
-  if (raw.length === 8) {
-    return `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}`;
-  }
-  return raw;
+  const len = Math.min(tstamp.length, 8);
+  if (len < 4) return tstamp;
+  if (len === 4) return tstamp.slice(0, 4);
+  if (len === 6) return `${tstamp.slice(0, 4)}-${tstamp.slice(4, 6)}`;
+  return `${tstamp.slice(0, 4)}-${tstamp.slice(4, 6)}-${tstamp.slice(6, 8)}`;
 }
 
 /**
@@ -73,7 +51,7 @@ function extractHostname(url: string): string {
  * @param results - Array of search result items
  * @param offset - Pagination offset; added to result numbering
  * @param total - Optional total count; used to indicate next page availability
- * @returns Formatted string, truncated at MAX_TOKENS via truncateOutput()
+ * @returns Formatted string
  */
 export function formatSearchResults(
   query: string,
@@ -114,7 +92,7 @@ export function formatSearchResults(
     output += `[Próxima página disponível: offset=${offset + results.length}]\n`;
   }
 
-  return truncateOutput(output);
+  return output;
 }
 
 /**
@@ -130,7 +108,7 @@ export function formatSearchResults(
  * @param results - Array of version items with tstamp, status, link, optional size
  * @param offset - Pagination offset; added to result numbering
  * @param total - Optional total count; used to indicate next page availability
- * @returns Formatted string, truncated at MAX_TOKENS via truncateOutput()
+ * @returns Formatted string
  */
 export function formatVersionResults(
   url: string,
@@ -159,7 +137,7 @@ export function formatVersionResults(
     output += `[Próxima página disponível: offset=${offset + results.length}]\n`;
   }
 
-  return truncateOutput(output);
+  return output;
 }
 
 /**
@@ -177,7 +155,7 @@ export function formatVersionResults(
  * @param results - Array of image result items
  * @param offset - Pagination offset; added to result numbering
  * @param total - Optional total count; used to indicate next page availability
- * @returns Formatted string, truncated at MAX_TOKENS via truncateOutput()
+ * @returns Formatted string
  */
 export function formatImageResults(
   query: string,
@@ -210,5 +188,5 @@ export function formatImageResults(
     output += `[Próxima página disponível: offset=${offset + results.length}]\n`;
   }
 
-  return truncateOutput(output);
+  return output;
 }
