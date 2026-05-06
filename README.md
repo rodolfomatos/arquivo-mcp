@@ -36,6 +36,8 @@ make build
 
 ### Claude Desktop
 
+#### Manual configuration
+
 Add to your `claude_desktop_config.json`:
 
 ```json
@@ -47,6 +49,19 @@ Add to your `claude_desktop_config.json`:
   }
 }
 ```
+
+#### Automated setup
+
+You can also let `make` configure Claude Desktop automatically:
+
+```bash
+# Install globally and create config entry
+make install-claude
+
+# Then restart Claude Desktop
+```
+
+This performs a global `npm install -g` and writes the MCP server entry to `~/.config/Claude/claude_desktop_config.json`.
 
 If installed locally without global bin:
 
@@ -201,6 +216,50 @@ npm run test:integration
 
 # Run all quality gates
 make check
+```
+
+## Using with OpenCode
+
+OpenCode is an open-source AI coding agent with built-in MCP support. To use `arquivo-mcp` with OpenCode:
+
+1. Build the project: `make build`
+2. Generate the OpenCode configuration:
+
+```bash
+make install-opencode
+```
+
+This interactively creates `opencode.json` in the current directory pointing to the built server. It asks for `MAX_REQUESTS_PER_SECOND` and `LOG_LEVEL` (defaults: 1, info).
+
+3. Run OpenCode in this directory:
+
+```bash
+opencode
+```
+
+The `arquivo_*` tools will be available. Example prompt:
+
+```
+Use arquivo_search_fulltext to find news about Portugal in 2008
+```
+
+Alternatively, create `opencode.json` manually:
+
+```json
+{
+  "$$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "arquivo": {
+      "type": "local",
+      "command": ["node", "/absolute/path/to/arquivo-mcp/dist/index.js"],
+      "enabled": true,
+      "environment": {
+        "MAX_REQUESTS_PER_SECOND": "1",
+        "LOG_LEVEL": "info"
+      }
+    }
+  }
+}
 ```
 
 ## Production Deployment
