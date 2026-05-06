@@ -222,20 +222,34 @@ make check
 
 OpenCode is an open-source AI coding agent with built-in MCP support. To use `arquivo-mcp` with OpenCode:
 
-1. Build the project: `make build`
-2. Generate the OpenCode configuration:
+1. **Build the project** (in the cloned directory):
 
-```bash
-make install-opencode
-```
+   ```bash
+   cd /path/to/arquivo-mcp
+   make build
+   ```
 
-This interactively creates `opencode.json` in the current directory pointing to the built server. It asks for `MAX_REQUESTS_PER_SECOND` and `LOG_LEVEL` (defaults: 1, info).
+2. **Generate the OpenCode configuration** (from the project root):
 
-3. Run OpenCode in this directory:
+   ```bash
+   make install-opencode
+   ```
 
-```bash
-opencode
-```
+   This interactively creates `opencode.json` in the current directory pointing to the built server. It asks for `MAX_REQUESTS_PER_SECOND` and `LOG_LEVEL` (defaults: 1, info).
+
+   Alternatively, you can run from anywhere using:
+
+   ```bash
+   make -C /path/to/arquivo-mcp install-opencode
+   ```
+
+3. **Run OpenCode** in that same directory:
+   ```bash
+   opencode
+   ```
+   If `opencode` is not in your PATH, install it first (https://opencode.ai/docs) or use `npx opencode`.
+
+The `arquivo_*` tools will be available. Example prompt:
 
 The `arquivo_*` tools will be available. Example prompt:
 

@@ -125,11 +125,12 @@ install-claude:
 # -------------------------------------------------
 install-opencode:
 	@echo "⚙️  Generating opencode.json for OpenCode..."
+	@test -f dist/index.js || { echo "❌ Build not found. Run 'make build' first."; exit 1; }
 	@read -p "Set MAX_REQUESTS_PER_SECOND [1]: " rps; \
 	rps=$${rps:-1}; \
 	read -p "Set LOG_LEVEL [info]: " loglevel; \
 	loglevel=$${loglevel:-info}; \
-	abs_path="$(abspath dist/index.js)"; \
+	abs_path="$(CURDIR)/dist/index.js"; \
 	echo "{"; \
 	echo '  "$$schema": "https://opencode.ai/config.json",'; \
 	echo '  "mcp": {'; \
