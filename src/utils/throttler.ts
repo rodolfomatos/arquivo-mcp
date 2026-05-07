@@ -40,7 +40,10 @@ export class TokenBucket {
       // Resolve waiting consumers if tokens are available
       while (this.tokens >= 1 && this.waiting.length > 0) {
         this.tokens -= 1;
-        this.waiting.shift()?.();
+        const consumer = this.waiting[0];
+        if (consumer) {
+          consumer();
+        }
       }
     }, 100);
   }
@@ -58,7 +61,13 @@ export class TokenBucket {
       return;
     }
     return new Promise((resolve) => {
-      this.waiting.push(resolve);
+      const wrappedResolve = () => {
+        if (this.waiting.includes(wrappedResolve)) {
+          this.waiting.splice(this.waiting.indexOf(wrappedResolve), 1);
+          resolve();
+        }
+      };
+      this.waiting.push(wrappedResolve);
     });
   }
 

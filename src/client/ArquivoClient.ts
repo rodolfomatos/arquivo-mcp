@@ -300,6 +300,15 @@ export class ArquivoClient {
     maxItems?: number;
     offset?: number;
   }): Promise<Version[]> {
+    try {
+      const urlToCheck = params.url.includes('://') ? params.url : `http://${params.url}`;
+      const parsed = new URL(urlToCheck);
+      if (!['http:', 'https:'].includes(parsed.protocol)) {
+        throw new Error('Invalid protocol');
+      }
+    } catch {
+      throw new Error(`Invalid URL: ${params.url}`);
+    }
     const data = await this.request<ApiResponse<ApiItem>>('/textsearch', {
       versionHistory: params.url,
       from: params.from,
@@ -532,7 +541,13 @@ export class ArquivoClient {
   }
 
   private buildArchiveLink(tstamp: string, originalUrl: string): string {
-    if (!tstamp) return originalUrl;
-    return `https://arquivo.pt/wayback/${tstamp}/${originalUrl}`;
+    if (!tstamp || !originalUrl) return originalUrl || '';
+    try {
+      new URL(originalUrl);
+    } catch {
+      return originalUrl;
+    }
+    const safeTstamp = tstamp.replace(/[^0-9]/g, '');
+    return `https://arquivo.pt/wayback/${safeTstamp}/${encodeURIComponent(originalUrl)}`;
   }
 }

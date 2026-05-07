@@ -31,7 +31,7 @@ function extractHostname(url: string): string {
   try {
     return new URL(url).hostname.replace(/^www\./, '');
   } catch {
-    return url; // fallback: show raw URL
+    return '[URL inválido]';
   }
 }
 

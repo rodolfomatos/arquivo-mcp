@@ -87,9 +87,9 @@ describe('ArquivoClient', () => {
 
       const results = await client.searchFulltext({ query: 'test' });
 
-      expect(results[0].archiveLink).toBe(
-        'https://arquivo.pt/wayback/20200101120000/http://example.com/page',
-      );
+expect(results[0].archiveLink).toBe(
+      'https://arquivo.pt/wayback/20200101120000/http%3A%2F%2Fexample.com%2Fpage',
+    );
     });
   });
 
