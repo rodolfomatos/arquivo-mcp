@@ -73,15 +73,18 @@ async function main() {
     },
   );
 
+  const maxRetriesEnv =
+    typeof process.env.MAX_RETRIES === 'string' ? parseInt(process.env.MAX_RETRIES, 10) : 4;
+  const timeoutMsEnv =
+    typeof process.env.TIMEOUT_MS === 'string' ? parseInt(process.env.TIMEOUT_MS, 10) : 120000;
+
   const client = new ArquivoClient({
     maxRequestsPerSecond:
       typeof process.env.MAX_REQUESTS_PER_SECOND === 'string'
         ? parseInt(process.env.MAX_REQUESTS_PER_SECOND, 10)
         : 1,
-    maxRetries:
-      typeof process.env.MAX_RETRIES === 'string' ? parseInt(process.env.MAX_RETRIES, 10) : 4,
-    timeoutMs:
-      typeof process.env.TIMEOUT_MS === 'string' ? parseInt(process.env.TIMEOUT_MS, 10) : 120000,
+    maxRetries: Number.isNaN(maxRetriesEnv) ? 4 : maxRetriesEnv,
+    timeoutMs: Number.isNaN(timeoutMsEnv) ? 120000 : timeoutMsEnv,
   });
 
   const tools: Tool[] = [

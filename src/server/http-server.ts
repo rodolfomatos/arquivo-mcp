@@ -19,6 +19,9 @@ import { logger } from '../utils/logger.js';
 
 /** In-memory session store for stateful transport */
 const sessions: Map<string, StreamableHTTPServerTransport> = new Map();
+const sessionTimestamps: Map<string, number> = new Map();
+const SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
 function createTools(): Tool[] {
   return [
@@ -123,12 +126,15 @@ function createTools(): Tool[] {
 }
 
 function createServerInstance(): Server {
+  const maxRetriesEnv =
+    typeof process.env.MAX_RETRIES === 'string' ? parseInt(process.env.MAX_RETRIES, 10) : 4;
+  const timeoutMsEnv =
+    typeof process.env.TIMEOUT_MS === 'string' ? parseInt(process.env.TIMEOUT_MS, 10) : 120000;
+
   const client = new ArquivoClient({
     maxRequestsPerSecond: Number(process.env.MAX_REQUESTS_PER_SECOND) || 1,
-    maxRetries:
-      typeof process.env.MAX_RETRIES === 'string' ? parseInt(process.env.MAX_RETRIES, 10) : 4,
-    timeoutMs:
-      typeof process.env.TIMEOUT_MS === 'string' ? parseInt(process.env.TIMEOUT_MS, 10) : 120000,
+    maxRetries: Number.isNaN(maxRetriesEnv) ? 4 : maxRetriesEnv,
+    timeoutMs: Number.isNaN(timeoutMsEnv) ? 120000 : timeoutMsEnv,
   });
 
   const tools = createTools();
@@ -179,6 +185,18 @@ function createServerInstance(): Server {
 export async function startHttpServer(port: number): Promise<void> {
   const server = createServerInstance();
 
+  function cleanupStaleSessions(): void {
+    const now = Date.now();
+    for (const [sessionId, timestamp] of sessionTimestamps.entries()) {
+      if (now - timestamp > SESSION_TTL_MS) {
+        sessions.delete(sessionId);
+        sessionTimestamps.delete(sessionId);
+      }
+    }
+  }
+
+  const cleanupInterval = setInterval(cleanupStaleSessions, CLEANUP_INTERVAL_MS);
+
   const httpServer = createServer(async (req, res) => {
     try {
       const sessionId = req.headers['mcp-session-id'] as string | undefined;
@@ -186,17 +204,20 @@ export async function startHttpServer(port: number): Promise<void> {
 
       if (sessionId && sessions.has(sessionId)) {
         transport = sessions.get(sessionId);
+        sessionTimestamps.set(sessionId, Date.now());
       } else if (!sessionId && req.method === 'POST') {
         transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: () => randomUUID(),
           onsessioninitialized: (sid) => {
             sessions.set(sid, transport as StreamableHTTPServerTransport);
+            sessionTimestamps.set(sid, Date.now());
           },
         });
 
         transport.onclose = () => {
-          if (transport?.sessionId && sessions.has(transport.sessionId)) {
+          if (transport?.sessionId) {
             sessions.delete(transport.sessionId);
+            sessionTimestamps.delete(transport.sessionId);
           }
         };
 
@@ -227,8 +248,8 @@ export async function startHttpServer(port: number): Promise<void> {
 
     const shutdown = (signal: string) => {
       logger.info(`Received ${signal}, shutting down...`);
-      httpServer.close();
-      process.exit(0);
+      clearInterval(cleanupInterval);
+      httpServer.close(() => process.exit(0));
     };
 
     process.on('SIGINT', () => shutdown('SIGINT'));

@@ -88,7 +88,7 @@ List all archived versions of a given URL.
 - `url` (required) — URL to check (domain only or full URL)
 - `from` (optional) — start date filter
 - `to` (optional) — end date filter
-- `maxItems` (optional) — number of versions (default 10, max 50)
+- `maxItems` (optional) — number of versions (default 20, max 100)
 - `offset` (optional) — pagination
 
 **Output:** Formatted list with timestamp, archive link, size.

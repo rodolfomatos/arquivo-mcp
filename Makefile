@@ -185,11 +185,6 @@ mcp-start-systemd:
 	echo "✅ systemd service installed and started."; \
 	echo "   Use: sudo systemctl status arquivo-mcp"; \
 	echo "   Stop: sudo systemctl stop arquivo-mcp"
-	sudo systemctl daemon-reload; \
-	sudo systemctl enable --now arquivo-mcp; \
-	echo "✅ systemd service installed and started."; \
-	echo "   Use: sudo systemctl status arquivo-mcp"; \
-	echo "   Stop: sudo systemctl stop arquivo-mcp"
 
 mcp-status:
 	@if [ -f $(MCP_PID_FILE) ]; then \

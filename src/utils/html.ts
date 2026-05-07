@@ -1,19 +1,33 @@
 import * as cheerio from 'cheerio';
 
+const MAX_ENTITY_DECODE_LENGTH = 10 * 1024 * 1024; // 10MB limit
+
 /**
  * Decode HTML entities in a string (no cheerio needed).
  * Handles numeric entities (&#123;, &#xABC;) and common named entities.
+ * Truncates input at MAX_ENTITY_DECODE_LENGTH to prevent catastrophic backtracking.
  */
 function decodeHtmlEntities(text: string): string {
+  if (text.length > MAX_ENTITY_DECODE_LENGTH) {
+    text = text.substring(0, MAX_ENTITY_DECODE_LENGTH);
+  }
   return text
-    .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(parseInt(dec, 10)))
-    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec) => {
+      const code = parseInt(dec, 10);
+      if (code > 0x10ffff) return `&#${dec};`;
+      return String.fromCharCode(code);
+    })
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => {
+      const code = parseInt(hex, 16);
+      if (code > 0x10ffff) return `&#x${hex};`;
+      return String.fromCharCode(code);
+    })
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
+    .replace(/</g, '<')
+    .replace(/>/g, '>')
+    .replace(/"/g, '"')
+    .replace(/'/g, "'")
     .replace(/&apos;/g, "'")
     .replace(/&eacute;/g, 'é')
     .replace(/&Eacute;/g, 'É')

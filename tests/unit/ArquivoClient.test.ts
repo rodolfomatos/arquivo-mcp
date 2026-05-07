@@ -195,8 +195,27 @@ describe('ArquivoClient', () => {
         400,
       ); // ~1600 chars
 
-      expect(result.content.length).toBeLessThanOrEqual(1620); // allow marker overhead
-      expect(result.content).toContain('...[truncated]');
-    });
+expect(result.content.length).toBeLessThanOrEqual(1620);
+    expect(result.content).toContain('...[truncated]');
   });
+
+  it('should use parseArchiveUrl to build noFrame/replay URL when wrapper detected', async () => {
+    const waybackHtml = `<html><head><title>Wrapped</title></head><body><div id="wm-ipp-base">toolbar</div><p>content</p></body></html>`;
+    const noFrameHtml = `<html><head><title>Original</title></head><body><p>Original content.</p></body></html>`;
+    mockFetch
+      .mockResolvedValueOnce(createMockResponse(waybackHtml, 200))
+      .mockResolvedValueOnce(createMockResponse(noFrameHtml, 200));
+
+    const result = await client.fetchPage(
+      'https://arquivo.pt/wayback/20230101120000/https://publico.pt/article/123',
+    );
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    const secondCallUrl = mockFetch.mock.calls[1][0] as string;
+    expect(secondCallUrl).toContain('noFrame/replay');
+    expect(secondCallUrl).toContain('20230101120000');
+    expect(secondCallUrl).toContain('https://publico.pt/article/123');
+    expect(result.content).toContain('Original content');
+  });
+});
 });

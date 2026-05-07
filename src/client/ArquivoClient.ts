@@ -90,8 +90,8 @@ export class ArquivoClient {
    * Initialize the ArquivoClient with optional configuration.
    *
    * @param options.maxRequestsPerSecond - Rate limit (requests per second). Default: 1. Can also be set via MAX_REQUESTS_PER_SECOND env var.
-   * @param options.maxRetries - Number of retry attempts on retryable errors. Default: 2.
-   * @param options.timeoutMs - Request timeout in milliseconds. Default: 10000 (10s).
+   * @param options.maxRetries - Number of retry attempts on retryable errors. Default: 4.
+   * @param options.timeoutMs - Request timeout in milliseconds. Default: 120000 (120s). Adaptive: actual = max(base, 30s + maxItems×600ms), clamped 30-180s.
    *
    * Throttling: TokenBucket with refill rate = capacity (steady 1 token/sec).
    * Retry: Exponential backoff with 0.8–1.2 jitter; respects Retry-After header on 429.
